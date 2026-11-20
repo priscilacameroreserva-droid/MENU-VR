@@ -56,7 +56,7 @@ class OE{
   }
 }
 const mkF = () => Array.from({length: 42}, () => new OE(1.6, 45, 1.0));
-const hands = [0, 1].map(() => ({on: false, seen: 0, f: mkF(), t: null, d: null, pinch: false}));
+const hands = [0, 1].map(() => ({on: false, seen: 0, f: mkF(), t: null, d: null, pinch: false, gunWas: false}));
 
 /* ---------- Hand tracking ---------- */
 let lastVT = -1;
@@ -140,22 +140,45 @@ const toEye = p => {
 };
 
 function layoutMenu(dt){
-  // O menu nasce centralizado e só muda de lugar quando uma mão faz arminha.
+  // Menu ancorado por orientação: guarda uma direção do mundo e projeta-a
+  // na tela conforme a cabeça gira. Sem sensor de posição, não há SLAM/6DOF real.
   const m = Math.min(EW, EH);
   menu.visible = true;
-  if(menu.cx == null){ menu.cx = EW / 2; menu.cy = EH / 2; }
-  const gunHand = hands.find(h => h.on && h.gun && h.d);
-  if(gunHand){
-    const tip = toEye(gunHand.d[8]);
-    // Posiciona o painel junto à ponta do indicador, sem deixá-lo sair da lente.
-    menu.cx = Math.max(m * 0.34, Math.min(EW - m * 0.34, tip[0]));
-    menu.cy = Math.max(m * 0.46, Math.min(EH - m * 0.46, tip[1] - m * 0.22));
-    menu.handAttached = true;
+  const focal = EW * 0.92;
+
+  if(menu.worldYaw == null || menu.worldPitch == null){
+    menu.worldYaw = gy.init ? gy.yaw : 0;
+    menu.worldPitch = gy.init ? gy.pitch : 0;
   }
+
+  // A arminha reposiciona o menu uma única vez, na direção da mão.
+  // Depois disso ele fica ancorado nessa direção, não acompanha a mão.
+  for(const h of hands){
+    if(h.gun && !h.gunWas && h.on && h.d){
+      const tip = toEye(h.d[8]);
+      const dx = (tip[0] - EW / 2) / focal;
+      const dy = (EH / 2 - tip[1]) / focal;
+      menu.worldYaw = (gy.init ? gy.yaw : 0) + Math.atan(dx);
+      menu.worldPitch = (gy.init ? gy.pitch : 0) + Math.atan(dy);
+    }
+    h.gunWas = !!h.gun;
+  }
+
+  if(gy.init){
+    const yawDelta = wrap(menu.worldYaw - gy.yaw);
+    const pitchDelta = menu.worldPitch - gy.pitch;
+    // Se o usuário virar mais de ~80 graus, o painel sai do campo de visão.
+    menu.cx = Math.abs(yawDelta) > 1.40 ? (yawDelta > 0 ? EW * 3 : -EW * 2) : EW / 2 + Math.tan(yawDelta) * focal;
+    menu.cy = Math.abs(pitchDelta) > 1.25 ? (pitchDelta > 0 ? -EH * 2 : EH * 3) : EH / 2 - Math.tan(pitchDelta) * focal;
+  } else {
+    // Fallback seguro: sem giroscópio, mantém o menu centralizado.
+    menu.cx = EW / 2;
+    menu.cy = EH / 2;
+  }
+
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
   menu.btn = items.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
 }
-
 function drawHands(){
   cur = [];
   for(const h of hands){
