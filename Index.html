@@ -286,21 +286,23 @@ function frame(ts){
   const IW = innerWidth, IH = innerHeight;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, IW, IH);
-  EW = stereo ? IW / 2 : IW; EH = IH;
+  // O laboratório de mãos usa a tela inteira; o modo VR normal mantém duas vistas independentes.
+  const renderStereo = stereo && !labActive;
+  EW = renderStereo ? IW / 2 : IW; EH = IH;
   layoutMenu(dt);
   const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720, s = Math.max(EW / vw, EH / vh);
   const disp = EW * 0.008;
-  for(let e = 0; e < (stereo ? 2 : 1); e++){
+  for(let e = 0; e < (renderStereo ? 2 : 1); e++){
     ctx.save(); ctx.translate(e * EW, 0);
     ctx.beginPath(); ctx.rect(0, 0, EW, EH); ctx.clip();
     ctx.drawImage(vid, (EW - vw * s) / 2, (EH - vh * s) / 2, vw * s, vh * s);
     drawHands();
     if(e === 0){ if(labActive) updateLabInteraction(); else if(menuVisible) handlePinch(); }
     if(labActive) drawLab();
-    else if(menuVisible) drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
+    else if(menuVisible) drawMenu(renderStereo ? (e === 0 ? disp : -disp) : 0);
     ctx.restore();
   }
-  if(stereo){
+  if(renderStereo){
     // separador central para deixar explícitas as duas vistas do VR Box
     ctx.save();ctx.strokeStyle='rgba(255,255,255,.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(IW/2,0);ctx.lineTo(IW/2,IH);ctx.stroke();ctx.restore();
   }
