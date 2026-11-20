@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Menu VR — teste 6DOF</title>
+<style>
+html,body{margin:0;height:100%;background:#090f1d;color:white;font:16px system-ui}
+#info{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box;gap:12px}
+h2{margin:0}p{max-width:440px;line-height:1.45}
+a{color:#69d8ff}
+</style>
+</head>
+<body>
+<div id="info">
+<h2>Teste de rastreamento espacial 6DOF</h2>
+<p>Este é um teste separado: usa WebXR com ARCore para manter um painel parado no espaço enquanto você move o celular. Abra no Chrome, permita câmera e movimento e toque em “INICIAR AR”.</p>
+<p><b>Importante:</b> este teste usa a tela em realidade aumentada. Ainda não substitui o modo VR Box dividido em duas telas nem inclui o rastreamento de mãos do menu original.</p>
+<p id="status">Verificando suporte a WebXR…</p>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js';
+import { ARButton } from 'https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/webxr/ARButton.js';
+
+const status = document.getElementById('status');
+if (!('xr' in navigator)) {
+  status.textContent = 'Este navegador não oferece WebXR. Tente abrir esta página no Google Chrome atualizado.';
+} else {
+  const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(innerWidth,innerHeight);
+  renderer.xr.enabled = true;
+  renderer.setClearColor(0x000000,0);
+  document.body.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera();
+  const panel = new THREE.Group();
+
+  const canvas = document.createElement('canvas');
+  canvas.width=1024; canvas.height=1024;
+  const g=canvas.getContext('2d');
+  g.fillStyle='rgba(7,17,39,.94)'; g.strokeStyle='#4cc9f0'; g.lineWidth=12;
+  g.beginPath(); g.roundRect(70,55,884,914,55); g.fill(); g.stroke();
+  g.fillStyle='#ffffff'; g.textAlign='center'; g.font='bold 78px system-ui'; g.fillText('MENU VR • 6DOF',512,175);
+  const labels=['PLAY','JOGOS','CONFIGURAÇÕES','SAIR'];
+  labels.forEach((label,i)=>{
+    const y=260+i*165;
+    g.fillStyle='rgba(76,201,240,.28)'; g.strokeStyle='#4cc9f0'; g.lineWidth=5;
+    g.beginPath(); g.roundRect(145,y,734,125,28); g.fill(); g.stroke();
+    g.fillStyle='#fff'; g.font='bold 58px system-ui'; g.fillText(label,512,y+82);
+  });
+  g.fillStyle='#b8d7e8'; g.font='30px system-ui'; g.fillText('Painel fixo no ambiente • mova o celular',512,930);
+  const texture=new THREE.CanvasTexture(canvas);
+  const material=new THREE.MeshBasicMaterial({map:texture,transparent:true,side:THREE.DoubleSide});
+  const mesh=new THREE.Mesh(new THREE.PlaneGeometry(0.85,0.85),material);
+  panel.add(mesh);
+
+  const reticle = new THREE.Mesh(new THREE.RingGeometry(.008,.012,32),new THREE.MeshBasicMaterial({color:0xffffff}));
+  reticle.position.z=-0.7;
+  camera.add(reticle); scene.add(camera);
+
+  const arButton=ARButton.createButton(renderer,{requiredFeatures:['local']});
+  arButton.textContent='INICIAR AR / 6DOF';
+  arButton.style.position='fixed'; arButton.style.bottom='24px'; arButton.style.left='50%';
+  arButton.style.transform='translateX(-50%)'; arButton.style.padding='14px 22px';
+  arButton.style.borderRadius='14px'; arButton.style.border='0'; arButton.style.background='#4cc9f0';
+  arButton.style.color='#06121f'; arButton.style.font='bold 18px system-ui';
+  document.body.appendChild(arButton);
+
+  renderer.xr.addEventListener('sessionstart',()=>{
+    document.getElementById('info').style.display='none';
+    // Fixa o painel no referencial espacial local no ponto em que a sessão começa.
+    const xrCam=renderer.xr.getCamera(camera);
+    panel.position.set(0,0,-1.4);
+    panel.quaternion.copy(xrCam.quaternion);
+    scene.add(panel);
+  });
+  renderer.xr.addEventListener('sessionend',()=>{
+    scene.remove(panel);
+    document.getElementById('info').style.display='flex';
+  });
+  renderer.setAnimationLoop(()=>renderer.render(scene,camera));
+  addEventListener('resize',()=>{
+    renderer.setSize(innerWidth,innerHeight);
+  });
+  status.textContent='WebXR disponível no navegador. Toque no botão para tentar iniciar AR.';
+}
+</script>
+</body>
+</html>
