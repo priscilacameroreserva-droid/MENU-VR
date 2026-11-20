@@ -10,14 +10,13 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:none}
 #ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0b1020;text-align:center;padding:20px}
 button{font:700 20px system-ui;padding:14px 28px;border:0;border-radius:14px;background:#4cc9f0;color:#06121f}
 #st{font-size:14px;opacity:.85;max-width:420px}
-label{font-size:14px}#modes{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:500px}#modes .mode{font-size:14px;padding:10px 12px;background:#26344e;color:#fff}#modes .selected{background:#4cc9f0;color:#06121f}
+label{font-size:14px}
 </style>
 </head>
 <body>
 <div id="ov">
   <h2>Menu VR</h2>
   <div id="st">Deixe o celular deitado no VR Box. Permita a câmera e o movimento quando pedir.</div>
-  <div id="modes"><div>Modo de visualização</div><button type="button" data-mode="single" class="mode">Tela única</button><button type="button" data-mode="lens" class="mode">Lente única</button><button type="button" data-mode="dual" class="mode selected">Lente dupla</button></div>
   <button id="go">ENTRAR EM VR</button>
 </div>
 <canvas id="c"></canvas>
@@ -29,7 +28,7 @@ let displayMode = 'dual', dpr = 1, lm = null, running = false;
 
 function resize(){ dpr = Math.min(devicePixelRatio || 1, 2); cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; }
 addEventListener('resize', resize);
-document.querySelectorAll('#modes .mode').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#modes .mode').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');displayMode=b.dataset.mode;}));
+
 
 /* ---------- Filtro One Euro: tira o tremor sem dar atraso ---------- */
 class OE{
@@ -127,8 +126,8 @@ function layoutMenu(dt){
     menu.cx = EW / 2 - fpx * Math.tan(dy); menu.cy = EH / 2 + fpx * Math.tan(dp);
   } else { menu.cx = EW / 2; menu.cy = EH / 2; }
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
-  const shownItems = settingsOpen ? ['VOLTAR','TELA ÚNICA','LENTE ÚNICA','LENTE DUPLA',tracking3Dof?'DESATIVAR 3DOF':'ATIVAR 3DOF'] : (gamesOpen || storeOpen) ? ['VOLTAR'] : items;
-  menu.btn = shownItems.map((n,i)=>({n,x:menu.cx-m*.26,y:menu.cy-menu.h/2+m*(settingsOpen?.12:gamesOpen?.70:.17)+i*m*(settingsOpen?.14:.175),w:m*.52,h:m*(settingsOpen?.105:.12)}));
+  const shownItems = settingsOpen ? ['VOLTAR','CONFIGURAÇÕES DE LENTE',(displayMode==='single'?'DESATIVAR':'ATIVAR')+' TELA ÚNICA',(displayMode==='lens'?'DESATIVAR':'ATIVAR')+' LENTE ÚNICA',(displayMode==='dual'?'DESATIVAR':'ATIVAR')+' LENTE DUPLA',tracking3Dof?'DESATIVAR 3DOF':'ATIVAR 3DOF'] : (gamesOpen || storeOpen) ? ['VOLTAR'] : items;
+  menu.btn = shownItems.map((n,i)=>({n,x:menu.cx-m*.29,y:menu.cy-menu.h/2+m*(settingsOpen?.10:gamesOpen?.70:.17)+i*m*(settingsOpen?.115:.175),w:m*.58,h:m*(settingsOpen?.085:.12)}));
   menu.gameCard = gamesOpen ? {x:menu.cx-m*.235,y:menu.cy-m*.22,w:m*.47,h:m*.47} : null;
 }
 
@@ -147,7 +146,7 @@ function detectThumbsUp(){
     if(gesture && !thumbsUpLatch[i]){
       if(gestureUp){ displayMode='single'; st.textContent='Tela única ativada.'; }
       else if(gestureDown){ displayMode='dual'; st.textContent='Lente dupla ativada.'; }
-      document.querySelectorAll('#modes .mode').forEach(x=>x.classList.toggle('selected',x.dataset.mode===displayMode));
+      
     }
     thumbsUpLatch[i] = gesture;
   }
@@ -187,9 +186,13 @@ function handlePinch(){
     if(!b) continue;
     if(settingsOpen){
       if(b.n === 'VOLTAR') settingsOpen=false;
-      else if(b.n==='TELA ÚNICA') displayMode='single';
-      else if(b.n==='LENTE ÚNICA') displayMode='lens';
-      else if(b.n==='LENTE DUPLA') displayMode='dual';
+      else if(b.n==='ATIVAR TELA ÚNICA') displayMode='single';
+      else if(b.n==='DESATIVAR TELA ÚNICA' && displayMode==='single') displayMode='dual';
+      else if(b.n==='ATIVAR LENTE ÚNICA') displayMode='lens';
+      else if(b.n==='DESATIVAR LENTE ÚNICA' && displayMode==='lens') displayMode='dual';
+      else if(b.n==='ATIVAR LENTE DUPLA') displayMode='dual';
+      else if(b.n==='DESATIVAR LENTE DUPLA' && displayMode==='dual') displayMode='single';
+      else if(b.n==='CONFIGURAÇÕES DE LENTE') { /* título */ }
       else if(b.n.includes('3DOF')) tracking3Dof=!tracking3Dof;
     } else if(gamesOpen){
       if(b.n === 'VOLTAR') gamesOpen = false;
