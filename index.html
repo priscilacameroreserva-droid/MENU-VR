@@ -131,15 +131,17 @@ function drawHands(){
     const P = h.d.map(toEye);
     const size = Math.hypot(h.d[0].x - h.d[9].x, h.d[0].y - h.d[9].y) || 1;
     const pd = Math.hypot(h.d[4].x - h.d[8].x, h.d[4].y - h.d[8].y) / size;
+    const dist = (a,b) => Math.hypot(h.d[a].x-h.d[b].x, h.d[a].y-h.d[b].y);
+    h.gun = dist(8,0) > dist(6,0) * 1.18 && dist(12,0) < dist(10,0) * 1.08 && dist(16,0) < dist(14,0) * 1.08 && dist(20,0) < dist(18,0) * 1.08;
     h.pinch = h.pinch ? pd < 0.45 : pd < 0.3;
-    cur.push({pt: [(P[4][0] + P[8][0]) / 2, (P[4][1] + P[8][1]) / 2], pinch: h.pinch});
+    cur.push({pt: [(P[4][0] + P[8][0]) / 2, (P[4][1] + P[8][1]) / 2], pinch: h.pinch, gun: h.gun});
     ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.strokeStyle = h.pinch ? '#7CFF6B' : 'rgba(255,255,255,.9)';
+    ctx.strokeStyle = h.gun ? '#278BFF' : h.pinch ? '#7CFF6B' : 'rgba(255,255,255,.9)';
     ctx.beginPath();
     for(const [a, b] of BONES){ ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); }
     ctx.stroke();
     P.forEach((p, i) => {
-      ctx.fillStyle = [4,8,12,16,20].includes(i) ? '#4cc9f0' : '#fff';
+      ctx.fillStyle = h.gun ? '#278BFF' : ([4,8,12,16,20].includes(i) ? '#4cc9f0' : '#fff');
       ctx.beginPath(); ctx.arc(p[0], p[1], [4,8,12,16,20].includes(i) ? 5 : 3.2, 0, 7); ctx.fill();
     });
   }
@@ -164,14 +166,28 @@ function drawMenu(dx){
     ctx.font = '700 ' + m * (b.n.length > 8 ? 0.05 : 0.065) + 'px system-ui';
     ctx.fillText(b.n, b.x + b.w / 2, b.y + b.h / 2);
     if (b.n === 'JOGOS' && activeMenu === 'games') { ctx.fillStyle = '#fff'; ctx.font = '600 ' + m * 0.034 + 'px system-ui'; ctx.fillText('Nenhum jogo encontrado.', menu.cx, b.y + b.h + m * 0.07); }
+    if (b.n === 'CONFIGURAÇÕES' && activeMenu === 'settings') { ctx.fillStyle = '#fff'; ctx.font = '600 ' + m * 0.03 + 'px system-ui'; ctx.fillText('Configurações do VR', menu.cx, b.y + b.h + m * 0.07); }
   }
   for(const c of cur){
-    ctx.strokeStyle = c.pinch ? '#7CFF6B' : '#fff'; ctx.lineWidth = 3;
+    ctx.strokeStyle = c.gun ? '#278BFF' : c.pinch ? '#7CFF6B' : '#fff'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(c.pt[0], c.pt[1], c.pinch ? m * 0.018 : m * 0.03, 0, 7); ctx.stroke();
   }
   ctx.restore();
 }
 
+function handleMenuGestures(){
+  const gun = hands.some(h => h.on && h.gun);
+  if (gun) activeMenu = 'home';
+  const pinching = cur.some(c => c.pinch);
+  if (pinching && !lastPinch) {
+    const p = cur.find(c => c.pinch)?.pt;
+    const b = menu.btn.find(x => p && p[0] >= x.x && p[0] <= x.x+x.w && p[1] >= x.y && p[1] <= x.y+x.h);
+    if (b?.n === 'JOGOS') activeMenu = 'games';
+    else if (b?.n === 'CONFIGURAÇÕES') activeMenu = 'settings';
+    else if (b?.n === 'ENTRAR EM VR') activeMenu = 'home';
+  }
+  lastPinch = pinching;
+}
 function frame(ts){
   if(!running) return;
   requestAnimationFrame(frame);
@@ -200,6 +216,7 @@ function frame(ts){
     drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
     ctx.restore();
   }
+  handleMenuGestures();
 }
 
 /* ---------- Início ---------- */
