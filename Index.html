@@ -18,7 +18,7 @@ label{font-size:14px}
   <h2>Menu VR</h2>
   <div id="st">Deixe o celular deitado no VR Box. Permita a câmera e o movimento quando pedir.</div>
   <label><input type="checkbox" id="two" checked> Duas telas (VR Box)</label>
-  <button id="go">ENTRAR</button>
+  <button id="go">INICIAR</button>
 </div>
 <canvas id="c"></canvas>
 <video id="v" playsinline muted autoplay style="display:none"></video>
@@ -101,10 +101,10 @@ addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
 
 /* ---------- Desenho ---------- */
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-const items = ['PLAY', 'JOGOS', 'CONFIGURAÇÕES', 'SAIR'];
+const items = ['JOGOS', 'CONFIGURAÇÕES', 'LOJA'];
 let EW, EH, cur = [], lastT = 0, menu = {};
 let settingsOpen = false, tracking3Dof = true;
-let gamesOpen = false, labActive = false, menuVisible = true;
+let gamesOpen = false, storeOpen = false, labActive = false, menuVisible = true;
 const labBlocks = Array.from({length: 8}, (_, i) => ({x: 0.30 + (i % 4) * 0.105, y: 0.58 - Math.floor(i / 4) * 0.13, vx: 0, vy: 0, color: ['#ff6b6b','#ffd166','#06d6a0','#4cc9f0','#a78bfa','#f472b6','#fb923c','#a3e635'][i]}));
 let draggedBlock = -1;
 const pinchLatch = [false, false];
@@ -126,7 +126,7 @@ function layoutMenu(dt){
     menu.cx = EW / 2 - fpx * Math.tan(dy); menu.cy = EH / 2 + fpx * Math.tan(dp);
   } else { menu.cx = EW / 2; menu.cy = EH / 2; }
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
-  const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : gamesOpen ? ['VOLTAR'] : items;
+  const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : (gamesOpen || storeOpen) ? ['VOLTAR'] : items;
   menu.btn = shownItems.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * (gamesOpen ? 0.70 : 0.17) + i * m * 0.175, w: m * 0.52, h: m * 0.12}));
   menu.gameCard = gamesOpen ? {x:menu.cx-m*.235,y:menu.cy-m*.22,w:m*.47,h:m*.47} : null;
 }
@@ -196,8 +196,10 @@ function handlePinch(){
     } else if(gamesOpen){
       if(b.n === 'VOLTAR') gamesOpen = false;
       else if(b.n === 'LABORATÓRIO DE HAND TRACKING'){ labActive = true; menuVisible = false; gamesOpen = false; }
-    } else if(b.n === 'JOGOS') gamesOpen = true;
+    } else if(storeOpen){ if(b.n === 'VOLTAR') storeOpen = false; }
+    else if(b.n === 'JOGOS') gamesOpen = true;
     else if(b.n === 'CONFIGURAÇÕES') settingsOpen = true;
+    else if(b.n === 'LOJA') storeOpen = true;
   }
 }
 
@@ -241,7 +243,11 @@ function drawMenu(dx){
   ctx.fillStyle = 'rgba(8,16,36,.78)'; ctx.strokeStyle = '#4cc9f0'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(menu.cx - menu.w / 2, menu.cy - menu.h / 2, menu.w, menu.h, m * 0.05); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = '700 ' + m * 0.065 + 'px system-ui'; ctx.fillText(settingsOpen ? 'CONFIGURAÇÕES' : gamesOpen ? 'JOGOS 1/10' : 'MENU', menu.cx, menu.cy - menu.h / 2 + m * 0.09);
+  ctx.font = '700 ' + m * 0.065 + 'px system-ui'; ctx.fillText(settingsOpen ? 'CONFIGURAÇÕES' : gamesOpen ? 'JOGOS 1/10' : storeOpen ? 'LOJA' : 'MENU', menu.cx, menu.cy - menu.h / 2 + m * 0.09);
+  if(storeOpen){
+    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='700 '+m*.052+'px system-ui';ctx.fillText('A loja está em desenvolvimento.',menu.cx,menu.cy);
+  }
   if(gamesOpen && menu.gameCard){
     const g=menu.gameCard, cx=g.x+g.w/2, cy=g.y+g.h/2;
     ctx.fillStyle='rgba(255,255,255,.10)'; ctx.strokeStyle='#4cc9f0'; ctx.lineWidth=3;
