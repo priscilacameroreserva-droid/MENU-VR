@@ -131,7 +131,7 @@ addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
 /* ---------- Desenho ---------- */
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 const items = ['ENTRAR EM VR', 'JOGOS', 'CONFIGURAÇÕES'];
-let activeMenu = 'home', lastPinch = false, gunSince = 0, gunActivated = false, returnLoadingUntil = 0;
+let activeMenu = 'home', lastPinch = false;
 let EW, EH, cur = [], lastT = 0, menu = {}, pageButton = null;
 
 const toEye = p => {
@@ -140,12 +140,18 @@ const toEye = p => {
 };
 
 function layoutMenu(dt){
-  // Menu preso ao centro de cada lente: não acompanha o giroscópio,
-  // não sai voando da tela e permanece sempre ao alcance das mãos.
+  // O menu nasce centralizado e só muda de lugar quando uma mão faz arminha.
   const m = Math.min(EW, EH);
   menu.visible = true;
-  menu.cx = EW / 2;
-  menu.cy = EH / 2;
+  if(menu.cx == null){ menu.cx = EW / 2; menu.cy = EH / 2; }
+  const gunHand = hands.find(h => h.on && h.gun && h.d);
+  if(gunHand){
+    const tip = toEye(gunHand.d[8]);
+    // Posiciona o painel junto à ponta do indicador, sem deixá-lo sair da lente.
+    menu.cx = Math.max(m * 0.34, Math.min(EW - m * 0.34, tip[0]));
+    menu.cy = Math.max(m * 0.46, Math.min(EH - m * 0.46, tip[1] - m * 0.22));
+    menu.handAttached = true;
+  }
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
   menu.btn = items.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
 }
@@ -238,12 +244,9 @@ function drawMenu(dx){
 
 function handleMenuGestures(){
   if(!menu.visible){ lastPinch = cur.some(c => c.pinch); return; }
-  const gun = hands.some(h => h.on && h.gun);
-  if(gun){ if(!gunSince) gunSince=performance.now(); if(!gunActivated && performance.now()-gunSince>=1000 && activeMenu!=='home'){ activeMenu='loading'; returnLoadingUntil=performance.now()+1200; gunActivated=true; } }
-  else { gunSince=0; gunActivated=false; }
-  if(activeMenu==='loading' && performance.now()>=returnLoadingUntil){ activeMenu='home'; }
+  // A arminha agora só reposiciona/ancora o menu na mão; nunca troca de página.
   const pinching = cur.some(c => c.pinch);
-  if(activeMenu==='loading'){ lastPinch=pinching; return; }
+  if(activeMenu==='loading') activeMenu='home';
   if(pinching && !lastPinch){
     const p=cur.find(c=>c.pinch)?.pt;
     if(activeMenu!=='home' && pageButton && p && p[0]>=pageButton.x && p[0]<=pageButton.x+pageButton.w && p[1]>=pageButton.y && p[1]<=pageButton.y+pageButton.h){ activeMenu='home'; }
