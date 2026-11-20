@@ -145,15 +145,9 @@ function detectThumbsUp(){
     const gestureDown = thumbDown && fingersCurled;
     const gesture = gestureUp || gestureDown;
     if(gesture && !thumbsUpLatch[i]){
-      if(gestureUp){
-        stereo = false;
-        $('two').checked = false;
-        st.textContent = 'Joinha para cima: modo de tela única ativado.';
-      } else if(gestureDown){
-        stereo = true;
-        $('two').checked = true;
-        st.textContent = 'Joinha para baixo: modo de tela dividida ativado.';
-      }
+      if(gestureUp){ displayMode='single'; st.textContent='Tela única ativada.'; }
+      else if(gestureDown){ displayMode='dual'; st.textContent='Lente dupla ativada.'; }
+      document.querySelectorAll('#modes .mode').forEach(x=>x.classList.toggle('selected',x.dataset.mode===displayMode));
     }
     thumbsUpLatch[i] = gesture;
   }
@@ -320,11 +314,10 @@ function frame(ts){
     if(lensMode){ctx.beginPath();ctx.roundRect(lensX,lensY,lensSide,lensSide,lensSide*.22);ctx.strokeStyle='rgba(255,255,255,.72)';ctx.lineWidth=Math.max(2,Math.min(EW,EH)*.008);ctx.stroke();}
     ctx.restore();
   }
-  if(stereo){
-    // Divisor central do VR Box; cada olho recebe uma cópia completa do menu e da cena.
+  if(displayMode==='dual'){
     ctx.save();ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(IW/2,0);ctx.lineTo(IW/2,IH);ctx.stroke();ctx.restore();
   }
-  if(stereo){
+  if(displayMode==='dual'){
     // X replicado no topo de cada lente para que ambos os olhos vejam o controle.
     for(let e=0;e<2;e++){
       const cx=e*EW+EW-26, cy=26;
