@@ -336,8 +336,9 @@ function frame(ts){
 
 /* ---------- Início ---------- */
 cv.addEventListener('pointerdown', e => {
-  const x=innerWidth-42,y=30;
-  if(Math.hypot(e.clientX-x,e.clientY-y)<28){
+  const y=26;
+  const xs = stereo ? [EW-26, innerWidth-26] : [innerWidth-42];
+  if(xs.some(x=>Math.hypot(e.clientX-x,e.clientY-y)<30)){
     if(labActive){labActive=false;menuVisible=true;} else menuVisible=!menuVisible;
     e.preventDefault();
   }
