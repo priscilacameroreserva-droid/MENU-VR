@@ -147,7 +147,9 @@ function layoutMenu(dt){
   const focal = EW * 0.92;
 
   if(menu.worldYaw == null && gy.init){
-    menu.worldYaw = gy.yaw;
+    // Deixa o painel um pouco ao lado da direção inicial, sem ficar no centro da visão.
+    // A direção permanece fixa no referencial do giroscópio enquanto a cabeça gira.
+    menu.worldYaw = gy.yaw + 0.45;
     menu.worldPitch = gy.pitch;
   }
 
