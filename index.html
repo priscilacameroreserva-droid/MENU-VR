@@ -117,17 +117,16 @@ const toEye = p => {
 function layoutMenu(dt){
   const m = Math.min(EW, EH), ppd = EH / 1.0;
   if(gy.has){
-    // menu preso no mundo: ao virar a cabeça ele fica no lugar (escala pelo campo de visão da câmera, ~66°)
+    // Menu ancorado no mundo: a posição não acompanha o centro da visão.
+    // Ao girar a cabeça, ele sai naturalmente do campo de visão e pode ser reencontrado ao olhar para trás.
     const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720;
     const fpx = 0.77 * vw * Math.max(EW / vw, EH / vh);
-    const dy = Math.max(-1.4, Math.min(1.4, wrap(gy.yaw - gy.y0)));
-    const dp = Math.max(-1.4, Math.min(1.4, gy.pitch - gy.p0));
-    menu.cx = EW / 2 - fpx * Math.tan(dy); menu.cy = EH / 2 + fpx * Math.tan(dp);
+    const dy = wrap(gy.yaw - gy.y0);
+    const dp = gy.pitch - gy.p0;
+    menu.cx = EW / 2 - fpx * Math.tan(dy);
+    menu.cy = EH / 2 + fpx * Math.tan(dp);
   } else { menu.cx = EW / 2; menu.cy = EH / 2; }
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
-  // Mantém o menu sempre dentro da área visível, mesmo quando o giroscópio oscila.
-  menu.cx = Math.max(menu.w / 2 + m * 0.04, Math.min(EW - menu.w / 2 - m * 0.04, menu.cx));
-  menu.cy = Math.max(menu.h / 2 + m * 0.04, Math.min(EH - menu.h / 2 - m * 0.04, menu.cy));
   menu.btn = items.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
 }
 
