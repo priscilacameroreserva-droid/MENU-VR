@@ -10,14 +10,14 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:none}
 #ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0b1020;text-align:center;padding:20px}
 button{font:700 20px system-ui;padding:14px 28px;border:0;border-radius:14px;background:#4cc9f0;color:#06121f}
 #st{font-size:14px;opacity:.85;max-width:420px}
-label{font-size:14px}
+label{font-size:14px}#modes{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:500px}#modes .mode{font-size:14px;padding:10px 12px;background:#26344e;color:#fff}#modes .selected{background:#4cc9f0;color:#06121f}
 </style>
 </head>
 <body>
 <div id="ov">
   <h2>Menu VR</h2>
   <div id="st">Deixe o celular deitado no VR Box. Permita a câmera e o movimento quando pedir.</div>
-  <label><input type="checkbox" id="two" checked> Duas telas (VR Box)</label>
+  <div id="modes"><div>Modo de visualização</div><button type="button" data-mode="single" class="mode">Tela única</button><button type="button" data-mode="lens" class="mode">Lente única</button><button type="button" data-mode="dual" class="mode selected">Lente dupla</button></div>
   <button id="go">ENTRAR EM VR</button>
 </div>
 <canvas id="c"></canvas>
@@ -25,10 +25,11 @@ label{font-size:14px}
 <script type="module">
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d'), vid = $('v'), st = $('st');
-let stereo = true, dpr = 1, lm = null, running = false;
+let displayMode = 'dual', dpr = 1, lm = null, running = false;
 
 function resize(){ dpr = Math.min(devicePixelRatio || 1, 2); cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; }
 addEventListener('resize', resize);
+document.querySelectorAll('#modes .mode').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#modes .mode').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');displayMode=b.dataset.mode;}));
 
 /* ---------- Filtro One Euro: tira o tremor sem dar atraso ---------- */
 class OE{
@@ -126,8 +127,8 @@ function layoutMenu(dt){
     menu.cx = EW / 2 - fpx * Math.tan(dy); menu.cy = EH / 2 + fpx * Math.tan(dp);
   } else { menu.cx = EW / 2; menu.cy = EH / 2; }
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
-  const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : (gamesOpen || storeOpen) ? ['VOLTAR'] : items;
-  menu.btn = shownItems.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * (gamesOpen ? 0.70 : 0.17) + i * m * 0.175, w: m * 0.52, h: m * 0.12}));
+  const shownItems = settingsOpen ? ['VOLTAR','TELA ÚNICA','LENTE ÚNICA','LENTE DUPLA',tracking3Dof?'DESATIVAR 3DOF':'ATIVAR 3DOF'] : (gamesOpen || storeOpen) ? ['VOLTAR'] : items;
+  menu.btn = shownItems.map((n,i)=>({n,x:menu.cx-m*.26,y:menu.cy-menu.h/2+m*(settingsOpen?.12:gamesOpen?.70:.17)+i*m*(settingsOpen?.14:.175),w:m*.52,h:m*(settingsOpen?.105:.12)}));
   menu.gameCard = gamesOpen ? {x:menu.cx-m*.235,y:menu.cy-m*.22,w:m*.47,h:m*.47} : null;
 }
 
@@ -191,8 +192,11 @@ function handlePinch(){
     const b = menu.btn.find(q => c.pt[0] >= q.x && c.pt[0] <= q.x + q.w && c.pt[1] >= q.y && c.pt[1] <= q.y + q.h);
     if(!b) continue;
     if(settingsOpen){
-      if(b.n === 'VOLTAR') settingsOpen = false;
-      else if(b.n.includes('3DOF')) { tracking3Dof = !tracking3Dof; settingsOpen = false; }
+      if(b.n === 'VOLTAR') settingsOpen=false;
+      else if(b.n==='TELA ÚNICA') displayMode='single';
+      else if(b.n==='LENTE ÚNICA') displayMode='lens';
+      else if(b.n==='LENTE DUPLA') displayMode='dual';
+      else if(b.n.includes('3DOF')) tracking3Dof=!tracking3Dof;
     } else if(gamesOpen){
       if(b.n === 'VOLTAR') gamesOpen = false;
       else if(b.n === 'LABORATÓRIO DE HAND TRACKING'){ labActive = true; menuVisible = false; gamesOpen = false; }
@@ -292,32 +296,28 @@ function frame(ts){
   const IW = innerWidth, IH = innerHeight;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, IW, IH);
-  EW = stereo ? IW / 2 : IW; EH = IH;
+  const eyeCount=displayMode==='dual'?2:1; EW=displayMode==='dual'?IW/2:IW; EH=IH;
   layoutMenu(dt);
   const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720, s = Math.max(EW / vw, EH / vh);
   const disp = EW * 0.008;
-  for(let e = 0; e < (stereo ? 2 : 1); e++){
+  for(let e=0;e<eyeCount;e++){
     ctx.save(); ctx.translate(e * EW, 0);
     // Uma lente por olho: janela quadrada arredondada, com margem preta ao redor.
     // A tela inteira é dividida em duas células independentes (esquerda/direita).
-    const lensSide = Math.min(EW * 0.90, EH * 0.90);
+    const lensMode=displayMode!=='single'; const lensSide=lensMode?Math.min(EW*.90,EH*.90):Math.max(EW,EH)*1.5;
     const lensX = (EW - lensSide) / 2;
     const lensY = (EH - lensSide) / 2;
-    ctx.beginPath();
-    ctx.roundRect(lensX, lensY, lensSide, lensSide, lensSide * 0.22);
-    ctx.clip();
+    if(lensMode){ctx.beginPath();ctx.roundRect(lensX,lensY,lensSide,lensSide,lensSide*.22);ctx.clip();}
     // A câmera preenche cada lente; a máscara deixa o exterior preto como no VR Box.
-    const eyeShift = stereo ? (e === 0 ? -disp : disp) : 0;
+    const eyeShift=displayMode==='dual'?(e===0?-EW*.008:EW*.008):0;
     // Escala a imagem para preencher a janela de lente sem virar uma bolinha pequena.
-    const lensScale = Math.max(lensSide / vw, lensSide / vh);
-    ctx.drawImage(vid, lensX + (lensSide - vw * lensScale) / 2 + eyeShift, lensY + (lensSide - vh * lensScale) / 2, vw * lensScale, vh * lensScale);
+    const tw=lensMode?lensSide:EW,th=lensMode?lensSide:EH,sc=Math.max(tw/vw,th/vh);ctx.drawImage(vid,(EW-tw)/2+(tw-vw*sc)/2+eyeShift,(EH-th)/2+(th-vh*sc)/2,vw*sc,vh*sc);
     drawHands();
     if(e === 0){ if(labActive) updateLabInteraction(); else if(menuVisible) handlePinch(); }
     if(labActive) drawLab();
     else if(menuVisible) drawMenu(0);
     // Contorno fino evidencia cada uma das duas lentes físicas.
-    ctx.beginPath(); ctx.roundRect(lensX, lensY, lensSide, lensSide, lensSide * 0.22);
-    ctx.strokeStyle='rgba(255,255,255,.72)'; ctx.lineWidth=Math.max(2,Math.min(EW,EH)*.008); ctx.stroke();
+    if(lensMode){ctx.beginPath();ctx.roundRect(lensX,lensY,lensSide,lensSide,lensSide*.22);ctx.strokeStyle='rgba(255,255,255,.72)';ctx.lineWidth=Math.max(2,Math.min(EW,EH)*.008);ctx.stroke();}
     ctx.restore();
   }
   if(stereo){
@@ -337,15 +337,12 @@ function frame(ts){
 /* ---------- Início ---------- */
 cv.addEventListener('pointerdown', e => {
   const y=26;
-  const xs = stereo ? [EW-26, innerWidth-26] : [innerWidth-42];
-  if(xs.some(x=>Math.hypot(e.clientX-x,e.clientY-y)<30)){
-    if(labActive){labActive=false;menuVisible=true;} else menuVisible=!menuVisible;
-    e.preventDefault();
-  }
+  const xs=displayMode==='dual'?[EW-26,innerWidth-26]:[innerWidth-42];
+  if(xs.some(x=>Math.hypot(e.clientX-x,e.clientY-y)<30)){running=false;vid.srcObject?.getTracks().forEach(t=>t.stop());cv.style.display='none';$('ov').style.display='flex';$('go').disabled=false;$('go').textContent='ENTRAR EM VR';e.preventDefault();}
 });
 $('go').onclick = async () => {
   const btn = $('go'); btn.disabled = true;
-  stereo = $('two').checked;
+  displayMode=document.querySelector('#modes .selected')?.dataset.mode||'dual';
   let step = 'permissões';
   try{
     document.documentElement.requestFullscreen?.().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
