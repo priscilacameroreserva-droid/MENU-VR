@@ -185,11 +185,11 @@ function handlePinch(){
     if(!c || !c.pinch){ pinchLatch[i] = false; continue; }
     if(pinchLatch[i]) continue;
     pinchLatch[i] = true;
+    if(gamesOpen && menu.gameCard && c.pt[0]>=menu.gameCard.x && c.pt[0]<=menu.gameCard.x+menu.gameCard.w && c.pt[1]>=menu.gameCard.y && c.pt[1]<=menu.gameCard.y+menu.gameCard.h){
+      labActive=true; menuVisible=false; gamesOpen=false; pinchLatch[i]=true; continue;
+    }
     const b = menu.btn.find(q => c.pt[0] >= q.x && c.pt[0] <= q.x + q.w && c.pt[1] >= q.y && c.pt[1] <= q.y + q.h);
     if(!b) continue;
-    if(gamesOpen && menu.gameCard && c.pt[0]>=menu.gameCard.x && c.pt[0]<=menu.gameCard.x+menu.gameCard.w && c.pt[1]>=menu.gameCard.y && c.pt[1]<=menu.gameCard.y+menu.gameCard.h){
-      labActive=true; menuVisible=false; gamesOpen=false; continue;
-    }
     if(settingsOpen){
       if(b.n === 'VOLTAR') settingsOpen = false;
       else if(b.n.includes('3DOF')) { tracking3Dof = !tracking3Dof; settingsOpen = false; }
@@ -299,7 +299,9 @@ function frame(ts){
   for(let e = 0; e < (stereo ? 2 : 1); e++){
     ctx.save(); ctx.translate(e * EW, 0);
     ctx.beginPath(); ctx.rect(0, 0, EW, EH); ctx.clip();
-    ctx.drawImage(vid, (EW - vw * s) / 2, (EH - vh * s) / 2, vw * s, vh * s);
+    // Duas vistas independentes lado a lado, com pequeno deslocamento de paralaxe.
+    const eyeShift = stereo ? (e === 0 ? -disp : disp) : 0;
+    ctx.drawImage(vid, (EW - vw * s) / 2 + eyeShift, (EH - vh * s) / 2, vw * s, EH < vh*s ? vh*s : vh*s);
     drawHands();
     if(e === 0){ if(labActive) updateLabInteraction(); else if(menuVisible) handlePinch(); }
     if(labActive) drawLab();
