@@ -378,6 +378,7 @@ $('test6').onclick = async () => {
     renderer.setSize(innerWidth,innerHeight);
     renderer.xr.enabled = true;
     renderer.setClearColor(0x000000,0);
+    renderer.setAnimationLoop(()=>renderer.render(scene,camera));
     document.body.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
@@ -415,7 +416,7 @@ $('test6').onclick = async () => {
     const arButton=ARButton.createButton(renderer,{requiredFeatures:['local']});
     arButton.style.position='fixed'; arButton.style.bottom='22px'; arButton.style.left='50%'; arButton.style.transform='translateX(-50%)';
     document.body.appendChild(arButton);
-    arButton.click();
+    st.textContent = 'Toque no botão “START AR” para iniciar o rastreamento espacial 6DOF.';
   } catch(e) {
     st.textContent = 'Não foi possível iniciar o teste 6DOF: ' + (e.message || e);
     $('ov').classList.remove('loading'); btn.disabled=false;
