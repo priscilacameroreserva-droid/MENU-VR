@@ -105,6 +105,7 @@ const items = ['PLAY', 'JOGOS', 'CONFIGURAÇÕES', 'SAIR'];
 let EW, EH, cur = [], lastT = 0, menu = {};
 let settingsOpen = false, tracking3Dof = true;
 const pinchLatch = [false, false];
+const thumbsUpLatch = [false, false];
 
 const toEye = p => {
   const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720, s = Math.max(EW / vw, EH / vh);
@@ -124,6 +125,24 @@ function layoutMenu(dt){
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
   const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : items;
   menu.btn = shownItems.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
+}
+
+function detectThumbsUp(){
+  for(let i = 0; i < hands.length; i++){
+    const h = hands[i];
+    if(!h.on || !h.d) { thumbsUpLatch[i] = false; continue; }
+    const p = h.d;
+    // Polegar estendido para cima e os outros quatro dedos recolhidos.
+    const thumbUp = p[4].y < p[3].y && p[3].y < p[2].y;
+    const fingersCurled = [[8,6],[12,10],[16,14],[20,18]].every(([tip,pip]) => p[tip].y > p[pip].y + 0.015);
+    const gesture = thumbUp && fingersCurled;
+    if(gesture && !thumbsUpLatch[i] && stereo){
+      stereo = false;
+      $('two').checked = false;
+      st.textContent = 'Modo de tela única ativado pelo gesto de joinha.';
+    }
+    thumbsUpLatch[i] = gesture;
+  }
 }
 
 function drawHands(){
@@ -190,6 +209,7 @@ function frame(ts){
   requestAnimationFrame(frame);
   const t = ts / 1000, dt = Math.min(t - lastT, 0.1) || 0.016; lastT = t;
   detect();
+  detectThumbsUp();
   // suavização extra a cada frame de tela (60Hz) para ficar bem fluido
   const k = 1 - Math.exp(-dt * 28);
   for(const h of hands){
