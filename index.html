@@ -7,7 +7,15 @@
 <style>
 html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,sans-serif;color:#fff;touch-action:none}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:none}
-#ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0b1020;text-align:center;padding:20px}
+#ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:linear-gradient(180deg,#18264b 0%,#f29b62 52%,#f7c47d 68%,#304c32 69%,#14251b 100%);text-align:center;padding:20px;overflow:hidden}
+#ov:before{content:"";position:absolute;left:-8%;right:-8%;bottom:-4%;height:34%;background:linear-gradient(160deg,transparent 0 22%,#253f28 23% 100%);clip-path:polygon(0 45%,18% 20%,35% 43%,55% 12%,72% 40%,100% 15%,100% 100%,0 100%);z-index:0}
+#ov:after{content:"";position:absolute;inset:auto 0 0;height:20%;background:repeating-linear-gradient(100deg,#162b1c 0 3px,#29462a 3px 6px);opacity:.9;z-index:0}
+#ov>*{position:relative;z-index:1}
+#ov h2{font-size:clamp(34px,8vw,58px);margin:0;text-shadow:0 3px 12px #15233b;letter-spacing:1px}
+#version{position:absolute!important;left:14px;bottom:12px;font-size:12px;opacity:.9;z-index:2!important;text-shadow:0 1px 5px #000}
+#logo{font-size:clamp(54px,13vw,88px);filter:drop-shadow(0 4px 8px #17243b);line-height:1.1}
+#st{color:#fff;text-shadow:0 1px 5px #17243b}
+#go{margin-top:10px;box-shadow:0 5px 18px #17243b66}
 button{font:700 20px system-ui;padding:14px 28px;border:0;border-radius:14px;background:#4cc9f0;color:#06121f}
 #st{font-size:14px;opacity:.85;max-width:420px}
 #loader{display:none;width:34px;height:34px;border:4px solid rgba(255,255,255,.2);border-top-color:#4cc9f0;border-radius:50%;animation:spin .8s linear infinite}
@@ -18,12 +26,12 @@ label{font-size:14px}
 </head>
 <body>
 <div id="ov">
-  <h2>Menu VR</h2>
-  <div style="font-size:12px;opacity:.7">ALFA 0.001 · @lsevi_12</div>
-  <div id="st">Deixe o celular deitado no VR Box. Permita a câmera e o movimento quando pedir.</div>
+  <div id="logo" aria-hidden="true">🥽</div>
+  <h2>MENU VR</h2>
+  <div id="st">Prepare seu VR Box e permita a câmera e o movimento quando solicitado.</div>
   <div id="loader" aria-label="Carregando"></div>
-  <label><input type="checkbox" id="two" checked> Duas telas (VR Box)</label>
-  <button id="go">ENTRAR</button>
+  <button id="go">ENTRAR EM VR</button>
+  <div id="version">Menu VR versão 0.0001 · @lsevi_12</div>
 </div>
 <canvas id="c"></canvas>
 <video id="v" playsinline muted autoplay style="display:none"></video>
@@ -90,15 +98,22 @@ function fwd([x, y, z, w]){
   return [-2*w*y - 2*x*z, 2*w*x - 2*y*z, -1 + 2*x*x + 2*y*y];
 }
 const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
-let gy = {has: false, yaw: 0, pitch: 0, y0: 0, p0: 0, init: false};
+let gy = {has: false, yaw: 0, pitch: 0, y0: 0, p0: 0, rawYaw: null, init: false};
 function onOri(e){
   if(e.alpha == null) return;
   const o = (screen.orientation ? screen.orientation.angle : (window.orientation || 0));
   const f = fwd(quat(e.alpha, e.beta, e.gamma, o));
   const yaw = Math.atan2(f[0], -f[2]), pitch = Math.asin(Math.max(-1, Math.min(1, f[1])));
-  if(!gy.init){ gy.yaw = yaw; gy.pitch = pitch; gy.y0 = yaw; gy.p0 = pitch; gy.init = true; }
-  gy.yaw += wrap(yaw - gy.yaw) * 0.6;
-  gy.pitch += (pitch - gy.pitch) * 0.6;
+  if(!gy.init){
+    gy.yaw = yaw; gy.pitch = pitch; gy.y0 = yaw; gy.p0 = pitch;
+    gy.rawYaw = yaw; gy.init = true;
+  } else {
+    // Acumula a rotação sem voltar ao centro ao cruzar +/-180 graus.
+    const deltaYaw = wrap(yaw - gy.rawYaw);
+    gy.rawYaw = yaw;
+    gy.yaw += deltaYaw * 0.6;
+    gy.pitch += (pitch - gy.pitch) * 0.6;
+  }
   gy.has = true;
 }
 addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
@@ -116,13 +131,17 @@ const toEye = p => {
 
 function layoutMenu(dt){
   const m = Math.min(EW, EH), ppd = EH / 1.0;
+  menu.visible = true;
   if(gy.has){
-    // Menu ancorado no mundo: a posição não acompanha o centro da visão.
-    // Ao girar a cabeça, ele sai naturalmente do campo de visão e pode ser reencontrado ao olhar para trás.
+    // Âncora fixa na direção do mundo em que o menu foi criado.
+    // Se a direção ficar atrás do usuário ou fora das lentes, o menu desaparece.
     const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720;
     const fpx = 0.77 * vw * Math.max(EW / vw, EH / vh);
-    const dy = wrap(gy.yaw - gy.y0);
+    const dy = gy.yaw - gy.y0;
     const dp = gy.pitch - gy.p0;
+    const halfFovX = Math.atan(EW / (2 * fpx));
+    const halfFovY = Math.atan(EH / (2 * fpx));
+    menu.visible = Math.abs(dy) < halfFovX && Math.abs(dp) < halfFovY;
     menu.cx = EW / 2 - fpx * Math.tan(dy);
     menu.cy = EH / 2 + fpx * Math.tan(dp);
   } else { menu.cx = EW / 2; menu.cy = EH / 2; }
@@ -187,6 +206,7 @@ function drawSubPage(dx){
 }
 
 function drawMenu(dx){
+  if(!menu.visible) return;
   if(activeMenu!=='home'){ drawSubPage(dx); return; }
   const m = menu.m;
   ctx.save(); ctx.translate(dx, 0);
@@ -216,6 +236,7 @@ function drawMenu(dx){
 }
 
 function handleMenuGestures(){
+  if(!menu.visible){ lastPinch = cur.some(c => c.pinch); return; }
   const gun = hands.some(h => h.on && h.gun);
   if(gun){ if(!gunSince) gunSince=performance.now(); if(!gunActivated && performance.now()-gunSince>=1000 && activeMenu!=='home'){ activeMenu='loading'; returnLoadingUntil=performance.now()+1200; gunActivated=true; } }
   else { gunSince=0; gunActivated=false; }
@@ -268,7 +289,7 @@ function frame(ts){
 /* ---------- Início ---------- */
 $('go').onclick = async () => {
   const btn = $('go'); btn.disabled = true; $('ov').classList.add('loading');
-  stereo = $('two').checked;
+  stereo = true;
   let step = 'permissões';
   try{
     document.documentElement.requestFullscreen?.().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
