@@ -298,22 +298,40 @@ function frame(ts){
   const disp = EW * 0.008;
   for(let e = 0; e < (stereo ? 2 : 1); e++){
     ctx.save(); ctx.translate(e * EW, 0);
-    // Janela retangular por olho: duas metades iguais, sem máscara circular que esconda a câmera.
-    ctx.beginPath(); ctx.rect(0, 0, EW, EH); ctx.clip();
-    // A mesma cena da câmera é renderizada separadamente em cada metade.
+    // Uma lente por olho: janela quadrada arredondada, com margem preta ao redor.
+    // A tela inteira é dividida em duas células independentes (esquerda/direita).
+    const lensSide = Math.min(EW * 0.90, EH * 0.90);
+    const lensX = (EW - lensSide) / 2;
+    const lensY = (EH - lensSide) / 2;
+    ctx.beginPath();
+    ctx.roundRect(lensX, lensY, lensSide, lensSide, lensSide * 0.22);
+    ctx.clip();
+    // A câmera preenche cada lente; a máscara deixa o exterior preto como no VR Box.
     const eyeShift = stereo ? (e === 0 ? -disp : disp) : 0;
-    ctx.drawImage(vid, (EW - vw * s) / 2 + eyeShift, (EH - vh * s) / 2, vw * s, vh * s);
+    // Escala a imagem para preencher a janela de lente sem virar uma bolinha pequena.
+    const lensScale = Math.max(lensSide / vw, lensSide / vh);
+    ctx.drawImage(vid, lensX + (lensSide - vw * lensScale) / 2 + eyeShift, lensY + (lensSide - vh * lensScale) / 2, vw * lensScale, vh * lensScale);
     drawHands();
     if(e === 0){ if(labActive) updateLabInteraction(); else if(menuVisible) handlePinch(); }
     if(labActive) drawLab();
     else if(menuVisible) drawMenu(0);
+    // Contorno fino evidencia cada uma das duas lentes físicas.
+    ctx.beginPath(); ctx.roundRect(lensX, lensY, lensSide, lensSide, lensSide * 0.22);
+    ctx.strokeStyle='rgba(255,255,255,.72)'; ctx.lineWidth=Math.max(2,Math.min(EW,EH)*.008); ctx.stroke();
     ctx.restore();
   }
   if(stereo){
     // Divisor central do VR Box; cada olho recebe uma cópia completa do menu e da cena.
     ctx.save();ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(IW/2,0);ctx.lineTo(IW/2,IH);ctx.stroke();ctx.restore();
   }
-  drawCloseX();
+  if(stereo){
+    // X replicado no topo de cada lente para que ambos os olhos vejam o controle.
+    for(let e=0;e<2;e++){
+      const cx=e*EW+EW-26, cy=26;
+      ctx.save();ctx.strokeStyle='#fff';ctx.lineWidth=4;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(cx-8,cy-8);ctx.lineTo(cx+8,cy+8);ctx.moveTo(cx+8,cy-8);ctx.lineTo(cx-8,cy+8);ctx.stroke();ctx.restore();
+    }
+  } else drawCloseX();
 }
 
 /* ---------- Início ---------- */
