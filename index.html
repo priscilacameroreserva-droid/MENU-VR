@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Menu VR</title>
+<style>
+html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,sans-serif;color:#fff;touch-action:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:none}
+#ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0b1020;text-align:center;padding:20px}
+button{font:700 20px system-ui;padding:14px 28px;border:0;border-radius:14px;background:#4cc9f0;color:#06121f}
+#st{font-size:14px;opacity:.85;max-width:420px}
+label{font-size:14px}
+</style>
+</head>
+<body>
+<div id="ov">
+  <h2>Menu VR</h2>
+  <div id="st">Deixe o celular deitado no VR Box. Permita a câmera e o movimento quando pedir.</div>
+  <label><input type="checkbox" id="two" checked> Duas telas (VR Box)</label>
+  <button id="go">ENTRAR</button>
+</div>
+<canvas id="c"></canvas>
+<video id="v" playsinline muted autoplay style="display:none"></video>
+<script type="module">
+const $ = id => document.getElementById(id);
+const cv = $('c'), ctx = cv.getContext('2d'), vid = $('v'), st = $('st');
+let stereo = true, dpr = 1, lm = null, running = false;
+
+function resize(){ dpr = Math.min(devicePixelRatio || 1, 2); cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; }
+addEventListener('resize', resize);
+
+/* ---------- Filtro One Euro: tira o tremor sem dar atraso ---------- */
+class OE{
+  constructor(mc, b, dc){ this.mc = mc; this.b = b; this.dc = dc; this.x = null; this.dx = 0; this.t = 0; }
+  a(c, dt){ const r = 2 * Math.PI * c * dt; return r / (r + 1); }
+  f(x, t){
+    if(this.x === null){ this.x = x; this.t = t; return x; }
+    const dt = Math.max(t - this.t, 1e-3); this.t = t;
+    this.dx += this.a(this.dc, dt) * ((x - this.x) / dt - this.dx);
+    this.x += this.a(this.mc + this.b * Math.abs(this.dx), dt) * (x - this.x);
+    return this.x;
+  }
+}
+const mkF = () => Array.from({length: 42}, () => new OE(1.6, 45, 1.0));
+const hands = [0, 1].map(() => ({on: false, seen: 0, f: mkF(), t: null, d: null, pinch: false}));
+
+/* ---------- Hand tracking ---------- */
+let lastVT = -1;
+function detect(){
+  if(!lm || vid.readyState < 2 || vid.currentTime === lastVT) return;
+  lastVT = vid.currentTime;
+  const now = performance.now();
+  let r; try{ r = lm.detectForVideo(vid, now); }catch(e){ return; }
+  const t = now / 1000, used = new Set();
+  for(const p of (r.landmarks || [])){
+    let best = -1, bd = 9;
+    hands.forEach((h, i) => {
+      if(used.has(i)) return;
+      const d = h.on ? Math.hypot(h.t[0].x - p[0].x, h.t[0].y - p[0].y) : 0.3;
+      if(d < bd){ bd = d; best = i; }
+    });
+    if(best < 0) continue;
+    used.add(best);
+    const h = hands[best];
+    if(!h.on){ h.f = mkF(); h.d = null; }
+    h.on = true; h.seen = t;
+    h.t = p.map((q, i) => ({x: h.f[i * 2].f(q.x, t), y: h.f[i * 2 + 1].f(q.y, t)}));
+    if(!h.d) h.d = h.t.map(q => ({...q}));
+  }
+}
+
+/* ---------- Giroscópio ---------- */
+const mul = (a, b) => { const [ax,ay,az,aw] = a, [bx,by,bz,bw] = b; return [ax*bw+aw*bx+ay*bz-az*by, ay*bw+aw*by+az*bx-ax*bz, az*bw+aw*bz+ax*by-ay*bx, aw*bw-ax*bx-ay*by-az*bz]; };
+function quat(a, b, g, o){
+  const d = Math.PI / 180, x = b*d, y = a*d, z = -g*d;
+  const c1 = Math.cos(x/2), c2 = Math.cos(y/2), c3 = Math.cos(z/2), s1 = Math.sin(x/2), s2 = Math.sin(y/2), s3 = Math.sin(z/2);
+  let q = [s1*c2*c3+c1*s2*s3, c1*s2*c3-s1*c2*s3, c1*c2*s3-s1*s2*c3, c1*c2*c3+s1*s2*s3];
+  q = mul(q, [-Math.SQRT1_2, 0, 0, Math.SQRT1_2]);
+  const h = -o * d / 2;
+  return mul(q, [0, 0, Math.sin(h), Math.cos(h)]);
+}
+function fwd([x, y, z, w]){
+  // gira o vetor (0,0,-1) pelo quaternion
+  return [-2*w*y - 2*x*z, 2*w*x - 2*y*z, -1 + 2*x*x + 2*y*y];
+}
+const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+let gy = {has: false, yaw: 0, pitch: 0, y0: 0, p0: 0, init: false};
+function onOri(e){
+  if(e.alpha == null) return;
+  const o = (screen.orientation ? screen.orientation.angle : (window.orientation || 0));
+  const f = fwd(quat(e.alpha, e.beta, e.gamma, o));
+  const yaw = Math.atan2(f[0], -f[2]), pitch = Math.asin(Math.max(-1, Math.min(1, f[1])));
+  if(!gy.init){ gy.yaw = yaw; gy.pitch = pitch; gy.y0 = yaw; gy.p0 = pitch; gy.init = true; }
+  gy.yaw += wrap(yaw - gy.yaw) * 0.6;
+  gy.pitch += (pitch - gy.pitch) * 0.6;
+  gy.has = true;
+}
+addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
+
+/* ---------- Desenho ---------- */
+const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const items = ['PLAY', 'JOGOS', 'CONFIGURAÇÕES', 'SAIR'];
+let EW, EH, cur = [], lastT = 0, menu = {};
+
+const toEye = p => {
+  const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720, s = Math.max(EW / vw, EH / vh);
+  return [(EW - vw * s) / 2 + p.x * vw * s, (EH - vh * s) / 2 + p.y * vh * s];
+};
+
+function layoutMenu(dt){
+  const m = Math.min(EW, EH), ppd = EH / 1.0;
+  if(gy.has){
+    // menu preso no mundo: ao virar a cabeça ele fica no lugar (escala pelo campo de visão da câmera, ~66°)
+    const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720;
+    const fpx = 0.77 * vw * Math.max(EW / vw, EH / vh);
+    const dy = Math.max(-1.4, Math.min(1.4, wrap(gy.yaw - gy.y0)));
+    const dp = Math.max(-1.4, Math.min(1.4, gy.pitch - gy.p0));
+    menu.cx = EW / 2 - fpx * Math.tan(dy); menu.cy = EH / 2 + fpx * Math.tan(dp);
+  } else { menu.cx = EW / 2; menu.cy = EH / 2; }
+  menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
+  menu.btn = items.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
+}
+
+function drawHands(){
+  cur = [];
+  for(const h of hands){
+    if(!h.on) continue;
+    const P = h.d.map(toEye);
+    const size = Math.hypot(h.d[0].x - h.d[9].x, h.d[0].y - h.d[9].y) || 1;
+    const pd = Math.hypot(h.d[4].x - h.d[8].x, h.d[4].y - h.d[8].y) / size;
+    h.pinch = h.pinch ? pd < 0.45 : pd < 0.3;
+    cur.push({pt: [(P[4][0] + P[8][0]) / 2, (P[4][1] + P[8][1]) / 2], pinch: h.pinch});
+    ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.strokeStyle = h.pinch ? '#7CFF6B' : 'rgba(255,255,255,.9)';
+    ctx.beginPath();
+    for(const [a, b] of BONES){ ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); }
+    ctx.stroke();
+    P.forEach((p, i) => {
+      ctx.fillStyle = [4,8,12,16,20].includes(i) ? '#4cc9f0' : '#fff';
+      ctx.beginPath(); ctx.arc(p[0], p[1], [4,8,12,16,20].includes(i) ? 5 : 3.2, 0, 7); ctx.fill();
+    });
+  }
+}
+
+function drawMenu(dx){
+  const m = menu.m;
+  ctx.save(); ctx.translate(dx, 0);
+  ctx.fillStyle = 'rgba(8,16,36,.78)'; ctx.strokeStyle = '#4cc9f0'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.roundRect(menu.cx - menu.w / 2, menu.cy - menu.h / 2, menu.w, menu.h, m * 0.05); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = '700 ' + m * 0.065 + 'px system-ui'; ctx.fillText('MENU', menu.cx, menu.cy - menu.h / 2 + m * 0.09);
+  for(const b of menu.btn){
+    const hov = cur.some(c => c.pt[0] > b.x && c.pt[0] < b.x + b.w && c.pt[1] > b.y && c.pt[1] < b.y + b.h);
+    const press = hov && cur.some(c => c.pinch);
+    ctx.fillStyle = press ? '#7CFF6B' : hov ? '#4cc9f0' : 'rgba(76,201,240,.22)';
+    ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, m * 0.03); ctx.fill();
+    ctx.fillStyle = hov ? '#06121f' : '#fff';
+    ctx.font = '700 ' + m * (b.n.length > 8 ? 0.05 : 0.065) + 'px system-ui';
+    ctx.fillText(b.n, b.x + b.w / 2, b.y + b.h / 2);
+  }
+  for(const c of cur){
+    ctx.strokeStyle = c.pinch ? '#7CFF6B' : '#fff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(c.pt[0], c.pt[1], c.pinch ? m * 0.018 : m * 0.03, 0, 7); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function frame(ts){
+  if(!running) return;
+  requestAnimationFrame(frame);
+  const t = ts / 1000, dt = Math.min(t - lastT, 0.1) || 0.016; lastT = t;
+  detect();
+  // suavização extra a cada frame de tela (60Hz) para ficar bem fluido
+  const k = 1 - Math.exp(-dt * 28);
+  for(const h of hands){
+    if(h.on && t - h.seen > 0.25){ h.on = false; h.d = null; continue; }
+    if(h.on) h.t.forEach((q, i) => { h.d[i].x += (q.x - h.d[i].x) * k; h.d[i].y += (q.y - h.d[i].y) * k; });
+  }
+  const IW = innerWidth, IH = innerHeight;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, IW, IH);
+  EW = stereo ? IW / 2 : IW; EH = IH;
+  layoutMenu(dt);
+  const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720, s = Math.max(EW / vw, EH / vh);
+  const disp = EW * 0.008;
+  for(let e = 0; e < (stereo ? 2 : 1); e++){
+    ctx.save(); ctx.translate(e * EW, 0);
+    ctx.beginPath(); ctx.rect(0, 0, EW, EH); ctx.clip();
+    ctx.drawImage(vid, (EW - vw * s) / 2, (EH - vh * s) / 2, vw * s, vh * s);
+    drawHands();
+    drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
+    ctx.restore();
+  }
+}
+
+/* ---------- Início ---------- */
+$('go').onclick = async () => {
+  const btn = $('go'); btn.disabled = true;
+  stereo = $('two').checked;
+  let step = 'permissões';
+  try{
+    document.documentElement.requestFullscreen?.().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
+    if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+      await DeviceOrientationEvent.requestPermission();
+    }
+    addEventListener('deviceorientation', onOri);
+    st.textContent = 'Abrindo a câmera...';
+    const stream = await navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 720}, frameRate: {ideal: 60}}});
+    vid.srcObject = stream; await vid.play();
+    navigator.wakeLock?.request('screen').catch(() => {});
+    st.textContent = 'Carregando o rastreio das mãos (pode demorar um pouco)...';
+    const BASES = ['https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14', 'https://unpkg.com/@mediapipe/tasks-vision@0.10.14'];
+    let lib = null, base = '';
+    for(const b of BASES){
+      try{ step = 'biblioteca das mãos'; lib = await import(b + '/vision_bundle.mjs'); base = b; break; }catch(e){}
+    }
+    if(!lib) throw new Error('não consegui baixar a biblioteca (confira a internet)');
+    const {FilesetResolver, HandLandmarker} = lib;
+    step = 'arquivos de processamento';
+    const fs = await FilesetResolver.forVisionTasks(base + '/wasm');
+    step = 'modelo da mão';
+    const res = await fetch('https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task');
+    if(!res.ok) throw new Error('o download do modelo deu erro ' + res.status);
+    const buf = new Uint8Array(await res.arrayBuffer());
+    step = 'iniciar o rastreio';
+    const opt = d => ({baseOptions: {modelAssetBuffer: buf, delegate: d}, runningMode: 'VIDEO', numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5});
+    try{ lm = await HandLandmarker.createFromOptions(fs, opt('GPU')); }
+    catch(e){ lm = await HandLandmarker.createFromOptions(fs, opt('CPU')); }
+    $('ov').style.display = 'none'; cv.style.display = 'block';
+    resize(); running = true; requestAnimationFrame(frame);
+  }catch(e){
+    st.textContent = 'Deu erro em "' + step + '": ' + (e.message || e) + '. Confira a internet e se você permitiu a câmera e o movimento.';
+    btn.disabled = false; btn.textContent = 'TENTAR DE NOVO';
+  }
+};
+</script>
+</body>
+</html>
