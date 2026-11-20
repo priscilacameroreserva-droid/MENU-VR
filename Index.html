@@ -104,6 +104,9 @@ const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,
 const items = ['PLAY', 'JOGOS', 'CONFIGURAÇÕES', 'SAIR'];
 let EW, EH, cur = [], lastT = 0, menu = {};
 let settingsOpen = false, tracking3Dof = true;
+let gamesOpen = false, labActive = false, menuVisible = true;
+const labBlocks = Array.from({length: 8}, (_, i) => ({x: 0.30 + (i % 4) * 0.105, y: 0.58 - Math.floor(i / 4) * 0.13, vx: 0, vy: 0, color: ['#ff6b6b','#ffd166','#06d6a0','#4cc9f0','#a78bfa','#f472b6','#fb923c','#a3e635'][i]}));
+let draggedBlock = -1;
 const pinchLatch = [false, false];
 const thumbsUpLatch = [false, false];
 
@@ -123,7 +126,7 @@ function layoutMenu(dt){
     menu.cx = EW / 2 - fpx * Math.tan(dy); menu.cy = EH / 2 + fpx * Math.tan(dp);
   } else { menu.cx = EW / 2; menu.cy = EH / 2; }
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
-  const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : items;
+  const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : gamesOpen ? ['VOLTAR', 'LABORATÓRIO DE HAND TRACKING'] : items;
   menu.btn = shownItems.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
 }
 
@@ -186,10 +189,48 @@ function handlePinch(){
     if(settingsOpen){
       if(b.n === 'VOLTAR') settingsOpen = false;
       else if(b.n.includes('3DOF')) { tracking3Dof = !tracking3Dof; settingsOpen = false; }
-    } else if(b.n === 'CONFIGURAÇÕES') settingsOpen = true;
+    } else if(gamesOpen){
+      if(b.n === 'VOLTAR') gamesOpen = false;
+      else if(b.n === 'LABORATÓRIO DE HAND TRACKING'){ labActive = true; menuVisible = false; gamesOpen = false; }
+    } else if(b.n === 'JOGOS') gamesOpen = true;
+    else if(b.n === 'CONFIGURAÇÕES') settingsOpen = true;
   }
 }
 
+function drawCloseX(){
+  const x = innerWidth - 42, y = 30;
+  ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x-9,y-9); ctx.lineTo(x+9,y+9); ctx.moveTo(x+9,y-9); ctx.lineTo(x-9,y+9); ctx.stroke(); ctx.restore();
+}
+function drawLab(){
+  const w = EW, h = EH;
+  // Mesa virtual em perspectiva, apresentada sobre a imagem da câmera.
+  ctx.save();
+  ctx.fillStyle = 'rgba(12,22,40,.78)'; ctx.strokeStyle = 'rgba(130,220,255,.9)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(w*.12,h*.69); ctx.lineTo(w*.88,h*.69); ctx.lineTo(w*.98,h*.91); ctx.lineTo(w*.02,h*.91); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '700 18px system-ui'; ctx.fillText('LABORATÓRIO DE HAND TRACKING',w/2,h*.12);
+  ctx.font = '14px system-ui'; ctx.fillText('Faça pinça para pegar e arraste para movimentar os blocos',w/2,h*.17);
+  for(const b of labBlocks){
+    const x=b.x*w, y=b.y*h, s=Math.min(w,h)*.075;
+    ctx.fillStyle=b.color; ctx.strokeStyle='rgba(255,255,255,.9)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.roundRect(x-s/2,y-s/2,s,s,8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(0,0,0,.25)'; ctx.fillRect(x-s*.32,y+s*.22,s*.64,s*.08);
+  }
+  ctx.restore();
+}
+function updateLabInteraction(){
+  for(const c of cur){
+    if(c.pinch){
+      if(draggedBlock < 0){
+        let best=-1,bd=Infinity;
+        labBlocks.forEach((b,i)=>{const d=Math.hypot(c.pt[0]-b.x*EW,c.pt[1]-b.y*EH); if(d<Math.min(EW,EH)*.09 && d<bd){best=i;bd=d;}});
+        draggedBlock=best;
+      }
+      if(draggedBlock>=0){labBlocks[draggedBlock].x=c.pt[0]/EW;labBlocks[draggedBlock].y=c.pt[1]/EH;}
+    } else draggedBlock=-1;
+  }
+  for(const b of labBlocks){ b.vy+=0.0008; b.y+=b.vy; if(b.y>0.66){b.y=0.66;b.vy*=-.25;} }
+}
 function drawMenu(dx){
   const m = menu.m;
   ctx.save(); ctx.translate(dx, 0);
@@ -237,13 +278,22 @@ function frame(ts){
     ctx.beginPath(); ctx.rect(0, 0, EW, EH); ctx.clip();
     ctx.drawImage(vid, (EW - vw * s) / 2, (EH - vh * s) / 2, vw * s, vh * s);
     drawHands();
-    if(e === 0) handlePinch();
-    drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
+    if(e === 0){ if(labActive) updateLabInteraction(); else if(menuVisible) handlePinch(); }
+    if(labActive) drawLab();
+    else if(menuVisible) drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
     ctx.restore();
   }
+  drawCloseX();
 }
 
 /* ---------- Início ---------- */
+cv.addEventListener('pointerdown', e => {
+  const x=innerWidth-42,y=30;
+  if(Math.hypot(e.clientX-x,e.clientY-y)<28){
+    if(labActive){labActive=false;menuVisible=true;} else menuVisible=!menuVisible;
+    e.preventDefault();
+  }
+});
 $('go').onclick = async () => {
   const btn = $('go'); btn.disabled = true;
   stereo = $('two').checked;
