@@ -126,8 +126,9 @@ function layoutMenu(dt){
     menu.cx = EW / 2 - fpx * Math.tan(dy); menu.cy = EH / 2 + fpx * Math.tan(dp);
   } else { menu.cx = EW / 2; menu.cy = EH / 2; }
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
-  const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : gamesOpen ? ['VOLTAR', 'LABORATÓRIO DE HAND TRACKING'] : items;
-  menu.btn = shownItems.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
+  const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : gamesOpen ? ['VOLTAR'] : items;
+  menu.btn = shownItems.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * (gamesOpen ? 0.70 : 0.17) + i * m * 0.175, w: m * 0.52, h: m * 0.12}));
+  menu.gameCard = gamesOpen ? {x:menu.cx-m*.235,y:menu.cy-m*.22,w:m*.47,h:m*.47} : null;
 }
 
 function detectThumbsUp(){
@@ -186,6 +187,9 @@ function handlePinch(){
     pinchLatch[i] = true;
     const b = menu.btn.find(q => c.pt[0] >= q.x && c.pt[0] <= q.x + q.w && c.pt[1] >= q.y && c.pt[1] <= q.y + q.h);
     if(!b) continue;
+    if(gamesOpen && menu.gameCard && c.pt[0]>=menu.gameCard.x && c.pt[0]<=menu.gameCard.x+menu.gameCard.w && c.pt[1]>=menu.gameCard.y && c.pt[1]<=menu.gameCard.y+menu.gameCard.h){
+      labActive=true; menuVisible=false; gamesOpen=false; continue;
+    }
     if(settingsOpen){
       if(b.n === 'VOLTAR') settingsOpen = false;
       else if(b.n.includes('3DOF')) { tracking3Dof = !tracking3Dof; settingsOpen = false; }
@@ -237,7 +241,20 @@ function drawMenu(dx){
   ctx.fillStyle = 'rgba(8,16,36,.78)'; ctx.strokeStyle = '#4cc9f0'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(menu.cx - menu.w / 2, menu.cy - menu.h / 2, menu.w, menu.h, m * 0.05); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = '700 ' + m * 0.065 + 'px system-ui'; ctx.fillText(settingsOpen ? 'CONFIGURAÇÕES' : 'MENU', menu.cx, menu.cy - menu.h / 2 + m * 0.09);
+  ctx.font = '700 ' + m * 0.065 + 'px system-ui'; ctx.fillText(settingsOpen ? 'CONFIGURAÇÕES' : gamesOpen ? 'JOGOS 1/10' : 'MENU', menu.cx, menu.cy - menu.h / 2 + m * 0.09);
+  if(gamesOpen && menu.gameCard){
+    const g=menu.gameCard, cx=g.x+g.w/2, cy=g.y+g.h/2;
+    ctx.fillStyle='rgba(255,255,255,.10)'; ctx.strokeStyle='#4cc9f0'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.roundRect(g.x,g.y,g.w,g.h,m*.035); ctx.fill(); ctx.stroke();
+    // miniatura ilustrada do laboratório: mesa e cubos coloridos
+    ctx.fillStyle='rgba(10,20,38,.95)'; ctx.beginPath(); ctx.roundRect(g.x+m*.025,g.y+m*.025,g.w-m*.05,g.h*.68,m*.025); ctx.fill();
+    ctx.fillStyle='rgba(76,201,240,.45)'; ctx.beginPath(); ctx.moveTo(g.x+m*.07,g.y+g.h*.48); ctx.lineTo(g.x+g.w-m*.07,g.y+g.h*.48); ctx.lineTo(g.x+g.w-m*.10,g.y+g.h*.62); ctx.lineTo(g.x+m*.10,g.y+g.h*.62); ctx.closePath(); ctx.fill();
+    const cols=['#ff6b6b','#ffd166','#06d6a0','#4cc9f0','#a78bfa'];
+    cols.forEach((col,i)=>{ctx.fillStyle=col;ctx.fillRect(g.x+g.w*(.19+i*.14),g.y+g.h*(.27+(i%2)*.07),m*.055,m*.055);});
+    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='700 '+m*.038+'px system-ui';
+    ctx.fillText('LABORATÓRIO DE HAND TRACKING',cx,g.y+g.h*.78);
+    ctx.font='500 '+m*.027+'px system-ui';ctx.fillText('Pegue e movimente os cubos',cx,g.y+g.h*.89);
+  }
   for(const b of menu.btn){
     const hov = cur.some(c => c.pt[0] > b.x && c.pt[0] < b.x + b.w && c.pt[1] > b.y && c.pt[1] < b.y + b.h);
     const press = hov && cur.some(c => c.pinch);
@@ -282,6 +299,10 @@ function frame(ts){
     if(labActive) drawLab();
     else if(menuVisible) drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
     ctx.restore();
+  }
+  if(stereo){
+    // separador central para deixar explícitas as duas vistas do VR Box
+    ctx.save();ctx.strokeStyle='rgba(255,255,255,.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(IW/2,0);ctx.lineTo(IW/2,IH);ctx.stroke();ctx.restore();
   }
   drawCloseX();
 }
