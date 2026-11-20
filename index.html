@@ -16,6 +16,7 @@ label{font-size:14px}
 <body>
 <div id="ov">
   <h2>Menu VR</h2>
+  <div style="font-size:12px;opacity:.7">ALFA 0.001 · @lsevi_12</div>
   <div id="st">Deixe o celular deitado no VR Box. Permita a câmera e o movimento quando pedir.</div>
   <label><input type="checkbox" id="two" checked> Duas telas (VR Box)</label>
   <button id="go">ENTRAR</button>
@@ -100,7 +101,8 @@ addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
 
 /* ---------- Desenho ---------- */
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-const items = ['PLAY', 'JOGOS', 'CONFIGURAÇÕES', 'SAIR'];
+const items = ['ENTRAR EM VR', 'JOGOS', 'CONFIGURAÇÕES'];
+let activeMenu = 'home', lastPinch = false, gunSince = 0;
 let EW, EH, cur = [], lastT = 0, menu = {};
 
 const toEye = p => {
@@ -150,14 +152,18 @@ function drawMenu(dx){
   ctx.beginPath(); ctx.roundRect(menu.cx - menu.w / 2, menu.cy - menu.h / 2, menu.w, menu.h, m * 0.05); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = '700 ' + m * 0.065 + 'px system-ui'; ctx.fillText('MENU', menu.cx, menu.cy - menu.h / 2 + m * 0.09);
+  ctx.font = '600 ' + m * 0.025 + 'px system-ui'; ctx.fillStyle = 'rgba(255,255,255,.8)';
+  ctx.fillText('ALFA 0.001', menu.cx, menu.cy + menu.h / 2 - m * 0.075);
+  ctx.fillText('@lsevi_12', menu.cx, menu.cy + menu.h / 2 - m * 0.04);
   for(const b of menu.btn){
     const hov = cur.some(c => c.pt[0] > b.x && c.pt[0] < b.x + b.w && c.pt[1] > b.y && c.pt[1] < b.y + b.h);
     const press = hov && cur.some(c => c.pinch);
-    ctx.fillStyle = press ? '#7CFF6B' : hov ? '#4cc9f0' : 'rgba(76,201,240,.22)';
+    ctx.fillStyle = b.n === 'JOGOS' ? '#18C964' : (press ? '#7CFF6B' : hov ? '#4cc9f0' : 'rgba(76,201,240,.22)');
     ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, m * 0.03); ctx.fill();
     ctx.fillStyle = hov ? '#06121f' : '#fff';
     ctx.font = '700 ' + m * (b.n.length > 8 ? 0.05 : 0.065) + 'px system-ui';
     ctx.fillText(b.n, b.x + b.w / 2, b.y + b.h / 2);
+    if (b.n === 'JOGOS' && activeMenu === 'games') { ctx.fillStyle = '#fff'; ctx.font = '600 ' + m * 0.034 + 'px system-ui'; ctx.fillText('Nenhum jogo encontrado.', menu.cx, b.y + b.h + m * 0.07); }
   }
   for(const c of cur){
     ctx.strokeStyle = c.pinch ? '#7CFF6B' : '#fff'; ctx.lineWidth = 3;
@@ -186,7 +192,9 @@ function frame(ts){
   const disp = EW * 0.008;
   for(let e = 0; e < (stereo ? 2 : 1); e++){
     ctx.save(); ctx.translate(e * EW, 0);
-    ctx.beginPath(); ctx.rect(0, 0, EW, EH); ctx.clip();
+    ctx.beginPath();
+    const lensR = Math.min(EW * 0.47, EH * 0.47);
+    ctx.arc(EW / 2, EH / 2, lensR, 0, Math.PI * 2); ctx.clip();
     ctx.drawImage(vid, (EW - vw * s) / 2, (EH - vh * s) / 2, vw * s, vh * s);
     drawHands();
     drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
