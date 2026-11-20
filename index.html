@@ -368,6 +368,7 @@ $('test6').onclick = async () => {
   const btn = $('test6');
   btn.disabled = true; $('ov').classList.add('loading');
   let renderer = null, arButton = null;
+  let close6 = null;
   try {
     if (!navigator.xr) throw new Error('Este navegador não oferece WebXR. Abra no Chrome atualizado e verifique se o ARCore está instalado.');
     const supported = await navigator.xr.isSessionSupported('immersive-ar');
@@ -431,12 +432,25 @@ $('test6').onclick = async () => {
     }
     drawMissions();
 
+    close6 = document.createElement('button');
+    close6.type = 'button';
+    close6.textContent = '✕';
+    close6.setAttribute('aria-label','Sair do teste 6DOF e voltar ao início');
+    close6.style.cssText = 'display:none;position:fixed;top: max(18px, env(safe-area-inset-top));right: max(18px, env(safe-area-inset-right));z-index:2147483647;width:54px;height:54px;border:2px solid #fff;border-radius:50%;background:#e53935;color:#fff;font:bold 30px system-ui;box-shadow:0 3px 14px #0009;touch-action: manipulation;pointer-events:auto;';
+    document.body.appendChild(close6);
+    close6.addEventListener('click',()=>{
+      const session = renderer?.xr?.getSession();
+      if(session) session.end();
+    });
+
     renderer.xr.addEventListener('sessionstart',()=>{
       $('ov').style.display='none';
+      if(close6) close6.style.display='block';
       baseline=null; panelPlaced=false;
       drawMissions();
     });
     renderer.xr.addEventListener('sessionend',()=>{
+      if(close6){ close6.style.display='none'; close6.remove(); close6=null; }
       renderer.setAnimationLoop(null);
       renderer.dispose();
       renderer.domElement.remove();
@@ -476,7 +490,7 @@ $('test6').onclick = async () => {
       renderer.render(scene,camera);
     });
 
-    arButton=ARButton.createButton(renderer,{requiredFeatures:['local']});
+    arButton=ARButton.createButton(renderer,{requiredFeatures:['local'],optionalFeatures:['dom-overlay'],domOverlay:{root:document.body}});
     arButton.style.position='fixed'; arButton.style.bottom='22px'; arButton.style.left='50%'; arButton.style.transform='translateX(-50%)';
     document.body.appendChild(arButton);
     st.textContent='Toque em START AR e complete as três missões. O movimento para frente e para trás depende do rastreamento espacial do aparelho.';
