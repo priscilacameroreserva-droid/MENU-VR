@@ -367,58 +367,123 @@ $('testHands').onclick = () => startCameraMode('hands');
 $('test6').onclick = async () => {
   const btn = $('test6');
   btn.disabled = true; $('ov').classList.add('loading');
+  let renderer = null, arButton = null;
   try {
     if (!navigator.xr) throw new Error('Este navegador não oferece WebXR. Abra no Chrome atualizado e verifique se o ARCore está instalado.');
     const supported = await navigator.xr.isSessionSupported('immersive-ar');
-    if (!supported) throw new Error('Este aparelho/navegador não liberou o modo AR imersivo. O jogo original continua intacto.');
+    if (!supported) throw new Error('Este aparelho/navegador não liberou o modo AR imersivo. O teste precisa de WebXR com rastreamento espacial.');
     const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js');
     const { ARButton } = await import('https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/webxr/ARButton.js');
-    const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
     renderer.setPixelRatio(Math.min(devicePixelRatio,2));
     renderer.setSize(innerWidth,innerHeight);
     renderer.xr.enabled = true;
     renderer.setClearColor(0x000000,0);
-    renderer.setAnimationLoop(()=>renderer.render(scene,camera));
     document.body.appendChild(renderer.domElement);
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera();
+
     const panelCanvas = document.createElement('canvas');
-    panelCanvas.width=900; panelCanvas.height=900;
-    const g=panelCanvas.getContext('2d');
-    g.fillStyle='rgba(8,16,36,.94)'; g.strokeStyle='#4cc9f0'; g.lineWidth=12;
-    g.beginPath(); g.roundRect(45,45,810,810,55); g.fill(); g.stroke();
-    g.fillStyle='#fff'; g.textAlign='center'; g.font='bold 76px system-ui'; g.fillText('TESTE 6DOF',450,180);
-    ['MOVER A CABEÇA','APROXIMAR','AFASTAR','MOVER PARA OS LADOS'].forEach((v,i)=>{
-      g.fillStyle='rgba(76,201,240,.25)'; g.beginPath(); g.roundRect(110,250+i*135,680,100,25); g.fill();
-      g.fillStyle='#fff'; g.font='bold 38px system-ui'; g.fillText(v,450,315+i*135);
-    });
-    const texture=new THREE.CanvasTexture(panelCanvas);
-    const panel=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.9),new THREE.MeshBasicMaterial({map:texture,transparent:true,side:THREE.DoubleSide}));
-    let placed=false;
+    panelCanvas.width = 1000; panelCanvas.height = 1000;
+    const g = panelCanvas.getContext('2d');
+    const texture = new THREE.CanvasTexture(panelCanvas);
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.05,1.05),
+      new THREE.MeshBasicMaterial({map:texture,transparent:true,side:THREE.DoubleSide})
+    );
+    const missions = [false,false,false];
+    let baseline = null, panelPlaced = false, lastDrawn = '';
+    const wrapAngle = a => Math.atan2(Math.sin(a),Math.cos(a));
+
+    function drawMissions(){
+      const state = missions.map(Boolean).join('');
+      if(state === lastDrawn) return;
+      lastDrawn = state;
+      g.clearRect(0,0,1000,1000);
+      g.fillStyle='rgba(8,16,36,.96)'; g.strokeStyle='#4cc9f0'; g.lineWidth=12;
+      g.beginPath(); g.roundRect(35,35,930,930,55); g.fill(); g.stroke();
+      g.textAlign='center'; g.fillStyle='#fff'; g.font='bold 76px system-ui';
+      g.fillText('MENU DE TESTE',500,155);
+      g.fillStyle='#4cc9f0'; g.font='600 43px system-ui';
+      g.fillText('COMPLETE ESSAS MISSÕES',500,225);
+      const labels=[
+        'Mexa a cabeça para cima e para baixo',
+        'Mexa a cabeça para esquerda e para direita',
+        'Mexa a cabeça para frente e para trás'
+      ];
+      labels.forEach((label,i)=>{
+        const y=310+i*190;
+        g.fillStyle=missions[i]?'rgba(24,201,100,.28)':'rgba(76,201,240,.18)';
+        g.beginPath(); g.roundRect(90,y-70,820,135,28); g.fill();
+        g.textAlign='left'; g.fillStyle=missions[i]?'#65f0a0':'#4cc9f0';
+        g.font='bold 35px system-ui';
+        g.fillText('MISSÃO '+(i+1)+(missions[i]?'  ✓':''),125,y-20);
+        g.fillStyle='#fff'; g.font='bold 32px system-ui';
+        g.fillText(label,125,y+30,{maxWidth:745});
+      });
+      const done=missions.filter(Boolean).length;
+      g.textAlign='center'; g.fillStyle='#fff'; g.font='bold 48px system-ui';
+      g.fillText(done===3?'TESTE 6DOF CONCLUÍDO!':done+' DE 3 MISSÕES CONCLUÍDAS',500,900);
+      texture.needsUpdate=true;
+    }
+    drawMissions();
+
     renderer.xr.addEventListener('sessionstart',()=>{
       $('ov').style.display='none';
-      const session=renderer.xr.getSession();
-      const placePanel=(time,frame)=>{
-        if(placed || !frame) return;
-        const ref=renderer.xr.getReferenceSpace();
-        const pose=frame.getViewerPose(ref);
-        if(!pose) return;
-        const view=pose.views[0];
-        const p=view.transform.position, q=view.transform.orientation;
-        const forward=new THREE.Vector3(0,0,-1).applyQuaternion(new THREE.Quaternion(q.x,q.y,q.z,q.w));
-        panel.position.set(p.x+forward.x*1.5,p.y+forward.y*1.5,p.z+forward.z*1.5);
-        panel.quaternion.set(q.x,q.y,q.z,q.w);
-        scene.add(panel); placed=true;
-      };
-      session.requestAnimationFrame(function loop(t,frame){placePanel(t,frame); if(session) session.requestAnimationFrame(loop);});
+      baseline=null; panelPlaced=false;
+      drawMissions();
     });
-    renderer.xr.addEventListener('sessionend',()=>{renderer.dispose();renderer.domElement.remove();$('ov').style.display='flex';$('ov').classList.remove('loading');btn.disabled=false;placed=false;});
-    const arButton=ARButton.createButton(renderer,{requiredFeatures:['local']});
+    renderer.xr.addEventListener('sessionend',()=>{
+      renderer.setAnimationLoop(null);
+      renderer.dispose();
+      renderer.domElement.remove();
+      if(arButton) arButton.remove();
+      $('ov').style.display='flex';
+      $('ov').classList.remove('loading');
+      btn.disabled=false;
+    });
+
+    renderer.setAnimationLoop((time,frame)=>{
+      if(frame){
+        const refSpace=renderer.xr.getReferenceSpace();
+        const pose=frame.getViewerPose(refSpace);
+        if(pose){
+          const view=pose.views[0];
+          const p=view.transform.position;
+          const q=view.transform.orientation;
+          const orientation=new THREE.Quaternion(q.x,q.y,q.z,q.w);
+          const euler=new THREE.Euler().setFromQuaternion(orientation,'YXZ');
+          const position=new THREE.Vector3(p.x,p.y,p.z);
+          if(!baseline){
+            const forward=new THREE.Vector3(0,0,-1).applyQuaternion(orientation);
+            baseline={position:position.clone(),yaw:euler.y,pitch:euler.x,forward};
+            panel.position.copy(position).add(forward.clone().multiplyScalar(1.5));
+            panel.quaternion.copy(orientation);
+            scene.add(panel);
+            panelPlaced=true;
+          } else {
+            if(!missions[0] && Math.abs(euler.x-baseline.pitch)>=THREE.MathUtils.degToRad(15)) missions[0]=true;
+            if(!missions[1] && Math.abs(wrapAngle(euler.y-baseline.yaw))>=THREE.MathUtils.degToRad(20)) missions[1]=true;
+            const moved=position.clone().sub(baseline.position).dot(baseline.forward);
+            if(!missions[2] && Math.abs(moved)>=0.18) missions[2]=true;
+            drawMissions();
+          }
+        }
+      }
+      renderer.render(scene,camera);
+    });
+
+    arButton=ARButton.createButton(renderer,{requiredFeatures:['local']});
     arButton.style.position='fixed'; arButton.style.bottom='22px'; arButton.style.left='50%'; arButton.style.transform='translateX(-50%)';
     document.body.appendChild(arButton);
-    st.textContent = 'Toque no botão “START AR” para iniciar o rastreamento espacial 6DOF.';
+    st.textContent='Toque em START AR e complete as três missões. O movimento para frente e para trás depende do rastreamento espacial do aparelho.';
+    $('ov').classList.remove('loading');
+    btn.disabled=false;
   } catch(e) {
-    st.textContent = 'Não foi possível iniciar o teste 6DOF: ' + (e.message || e);
+    if(renderer){ renderer.dispose(); renderer.domElement?.remove(); }
+    if(arButton) arButton.remove();
+    st.textContent='Não foi possível iniciar o teste 6DOF: '+(e.message||e);
     $('ov').classList.remove('loading'); btn.disabled=false;
   }
 };
