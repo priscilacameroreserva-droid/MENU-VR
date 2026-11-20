@@ -146,15 +146,15 @@ function layoutMenu(dt){
   menu.visible = true;
   const focal = EW * 0.92;
 
-  if(menu.worldYaw == null || menu.worldPitch == null){
-    menu.worldYaw = gy.init ? gy.yaw : 0;
-    menu.worldPitch = gy.init ? gy.pitch : 0;
+  if(menu.worldYaw == null && gy.init){
+    menu.worldYaw = gy.yaw;
+    menu.worldPitch = gy.pitch;
   }
 
   // A arminha reposiciona o menu uma única vez, na direção da mão.
   // Depois disso ele fica ancorado nessa direção, não acompanha a mão.
   for(const h of hands){
-    if(h.gun && !h.gunWas && h.on && h.d){
+    if(h.gun && !h.gunWas && h.on && h.d && gy.init){
       const tip = toEye(h.d[8]);
       const dx = (tip[0] - EW / 2) / focal;
       const dy = (EH / 2 - tip[1]) / focal;
@@ -164,7 +164,7 @@ function layoutMenu(dt){
     h.gunWas = !!h.gun;
   }
 
-  if(gy.init){
+  if(gy.init && menu.worldYaw != null){
     const yawDelta = wrap(menu.worldYaw - gy.yaw);
     const pitchDelta = menu.worldPitch - gy.pitch;
     // Se o usuário virar mais de ~80 graus, o painel sai do campo de visão.
