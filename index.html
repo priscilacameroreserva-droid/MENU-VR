@@ -408,19 +408,21 @@ $('test6').onclick = async () => {
       g.fillStyle='#4cc9f0'; g.font='600 43px system-ui';
       g.fillText('COMPLETE ESSAS MISSÕES',500,225);
       const labels=[
-        'Mexa a cabeça para cima e para baixo',
-        'Mexa a cabeça para esquerda e para direita',
-        'Mexa a cabeça para frente e para trás'
+        ['OLHE PARA CIMA','DEPOIS OLHE PARA BAIXO'],
+        ['VIRE A CABEÇA PARA A ESQUERDA','DEPOIS VIRE PARA A DIREITA'],
+        ['MOVA A CABEÇA PARA FRENTE','DEPOIS VOLTE PARA TRÁS']
       ];
-      labels.forEach((label,i)=>{
+      labels.forEach((steps,i)=>{
         const y=310+i*190;
         g.fillStyle=missions[i]?'rgba(24,201,100,.28)':'rgba(76,201,240,.18)';
-        g.beginPath(); g.roundRect(90,y-70,820,135,28); g.fill();
+        g.beginPath(); g.roundRect(90,y-70,820,145,28); g.fill();
         g.textAlign='left'; g.fillStyle=missions[i]?'#65f0a0':'#4cc9f0';
         g.font='bold 35px system-ui';
-        g.fillText('MISSÃO '+(i+1)+(missions[i]?'  ✓':''),125,y-20);
-        g.fillStyle='#fff'; g.font='bold 32px system-ui';
-        g.fillText(label,125,y+30,{maxWidth:745});
+        g.fillText('MISSÃO '+(i+1)+(missions[i]?'  ✓':''),125,y-28);
+        g.fillStyle='#fff'; g.font='bold 29px system-ui';
+        g.fillText(steps[0],125,y+15,745);
+        g.fillStyle='#b9d9ee'; g.font='600 27px system-ui';
+        g.fillText(steps[1],125,y+52,745);
       });
       const done=missions.filter(Boolean).length;
       g.textAlign='center'; g.fillStyle='#fff'; g.font='bold 48px system-ui';
