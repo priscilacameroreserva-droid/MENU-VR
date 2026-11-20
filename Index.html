@@ -298,35 +298,20 @@ function frame(ts){
   const disp = EW * 0.008;
   for(let e = 0; e < (stereo ? 2 : 1); e++){
     ctx.save(); ctx.translate(e * EW, 0);
-    // Cada olho recebe sua própria janela óptica: lente vertical com cantos bem arredondados.
-    ctx.beginPath();
-    if(stereo){
-      const insetX = Math.max(8, EW * 0.025), insetY = Math.max(8, EH * 0.035);
-      const lensW = EW - insetX * 2, lensH = EH - insetY * 2;
-      ctx.roundRect(insetX, insetY, lensW, lensH, Math.min(lensW, lensH) * 0.22);
-    } else {
-      ctx.roundRect(0, 0, EW, EH, 0);
-    }
-    ctx.clip();
-    // Duas imagens completas independentes, uma em cada lente.
+    // Janela retangular por olho: duas metades iguais, sem máscara circular que esconda a câmera.
+    ctx.beginPath(); ctx.rect(0, 0, EW, EH); ctx.clip();
+    // A mesma cena da câmera é renderizada separadamente em cada metade.
     const eyeShift = stereo ? (e === 0 ? -disp : disp) : 0;
     ctx.drawImage(vid, (EW - vw * s) / 2 + eyeShift, (EH - vh * s) / 2, vw * s, vh * s);
     drawHands();
     if(e === 0){ if(labActive) updateLabInteraction(); else if(menuVisible) handlePinch(); }
     if(labActive) drawLab();
-    else if(menuVisible) drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
-    if(stereo){
-      const insetX = Math.max(8, EW * 0.025), insetY = Math.max(8, EH * 0.035);
-      const lensW = EW - insetX * 2, lensH = EH - insetY * 2;
-      ctx.beginPath(); ctx.roundRect(insetX, insetY, lensW, lensH, Math.min(lensW,lensH)*0.22);
-      ctx.lineWidth = Math.max(3, Math.min(EW,EH)*0.012);
-      ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.stroke();
-    }
+    else if(menuVisible) drawMenu(0);
     ctx.restore();
   }
   if(stereo){
-    // separador central para deixar explícitas as duas vistas do VR Box
-    ctx.save();ctx.strokeStyle='rgba(255,255,255,.22)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(IW/2,0);ctx.lineTo(IW/2,IH);ctx.stroke();ctx.restore();
+    // Divisor central do VR Box; cada olho recebe uma cópia completa do menu e da cena.
+    ctx.save();ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(IW/2,0);ctx.lineTo(IW/2,IH);ctx.stroke();ctx.restore();
   }
   drawCloseX();
 }
