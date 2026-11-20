@@ -66,17 +66,27 @@ function detect(){
   const now = performance.now();
   let r; try{ r = lm.detectForVideo(vid, now); }catch(e){ return; }
   const t = now / 1000, used = new Set();
-  for(const p of (r.landmarks || [])){
-    let best = -1, bd = 9;
-    hands.forEach((h, i) => {
-      if(used.has(i)) return;
-      const d = h.on ? Math.hypot(h.t[0].x - p[0].x, h.t[0].y - p[0].y) : 0.3;
-      if(d < bd){ bd = d; best = i; }
-    });
-    if(best < 0) continue;
+  const points = r.landmarks || [];
+  const labels = r.handednesses || r.handedness || [];
+  for(let n = 0; n < points.length; n++){
+    const p = points[n];
+    const side = labels[n]?.[0]?.categoryName || '';
+    // Mantém cada mão no seu próprio rastreador (esquerda/direita).
+    let best = side === 'Left' ? 0 : side === 'Right' ? 1 : -1;
+    if(best < 0 || used.has(best)){
+      best = -1;
+      let bd = Infinity;
+      hands.forEach((h, i) => {
+        if(used.has(i)) return;
+        const d = h.on && h.t ? Math.hypot(h.t[0].x - p[0].x, h.t[0].y - p[0].y) : (h.on ? 1 : 2);
+        if(d < bd){ bd = d; best = i; }
+      });
+    }
+    if(best < 0 || used.has(best)) continue;
     used.add(best);
     const h = hands[best];
     if(!h.on){ h.f = mkF(); h.d = null; }
+    h.side = side;
     h.on = true; h.seen = t;
     h.t = p.map((q, i) => ({x: h.f[i * 2].f(q.x, t), y: h.f[i * 2 + 1].f(q.y, t)}));
     if(!h.d) h.d = h.t.map(q => ({...q}));
@@ -130,21 +140,12 @@ const toEye = p => {
 };
 
 function layoutMenu(dt){
-  const m = Math.min(EW, EH), ppd = EH / 1.0;
+  // Menu preso ao centro de cada lente: não acompanha o giroscópio,
+  // não sai voando da tela e permanece sempre ao alcance das mãos.
+  const m = Math.min(EW, EH);
   menu.visible = true;
-  if(gy.has){
-    // Âncora fixa na direção do mundo em que o menu foi criado.
-    // Se a direção ficar atrás do usuário ou fora das lentes, o menu desaparece.
-    const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720;
-    const fpx = 0.77 * vw * Math.max(EW / vw, EH / vh);
-    const dy = gy.yaw - gy.y0;
-    const dp = gy.pitch - gy.p0;
-    const halfFovX = Math.atan(EW / (2 * fpx));
-    const halfFovY = Math.atan(EH / (2 * fpx));
-    menu.visible = Math.abs(dy) < halfFovX && Math.abs(dp) < halfFovY;
-    menu.cx = EW / 2 - fpx * Math.tan(dy);
-    menu.cy = EH / 2 + fpx * Math.tan(dp);
-  } else { menu.cx = EW / 2; menu.cy = EH / 2; }
+  menu.cx = EW / 2;
+  menu.cy = EH / 2;
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
   menu.btn = items.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
 }
