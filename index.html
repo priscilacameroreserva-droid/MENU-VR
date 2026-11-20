@@ -10,6 +10,9 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:none}
 #ov{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0b1020;text-align:center;padding:20px}
 button{font:700 20px system-ui;padding:14px 28px;border:0;border-radius:14px;background:#4cc9f0;color:#06121f}
 #st{font-size:14px;opacity:.85;max-width:420px}
+#loader{display:none;width:34px;height:34px;border:4px solid rgba(255,255,255,.2);border-top-color:#4cc9f0;border-radius:50%;animation:spin .8s linear infinite}
+#ov.loading #loader{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
 label{font-size:14px}
 </style>
 </head>
@@ -18,6 +21,7 @@ label{font-size:14px}
   <h2>Menu VR</h2>
   <div style="font-size:12px;opacity:.7">ALFA 0.001 · @lsevi_12</div>
   <div id="st">Deixe o celular deitado no VR Box. Permita a câmera e o movimento quando pedir.</div>
+  <div id="loader" aria-label="Carregando"></div>
   <label><input type="checkbox" id="two" checked> Duas telas (VR Box)</label>
   <button id="go">ENTRAR</button>
 </div>
@@ -102,8 +106,8 @@ addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
 /* ---------- Desenho ---------- */
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 const items = ['ENTRAR EM VR', 'JOGOS', 'CONFIGURAÇÕES'];
-let activeMenu = 'home', lastPinch = false, gunSince = 0;
-let EW, EH, cur = [], lastT = 0, menu = {};
+let activeMenu = 'home', lastPinch = false, gunSince = 0, gunActivated = false;
+let EW, EH, cur = [], lastT = 0, menu = {}, pageButton = null;
 
 const toEye = p => {
   const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720, s = Math.max(EW / vw, EH / vh);
@@ -147,7 +151,24 @@ function drawHands(){
   }
 }
 
+function drawSubPage(dx){
+  const m=menu.m, w=m*.72, h=m*.58, x=menu.cx-w/2, y=menu.cy-h/2;
+  ctx.save(); ctx.translate(dx,0);
+  ctx.fillStyle='rgba(8,16,36,.94)'; ctx.strokeStyle='#4cc9f0'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.roundRect(x,y,w,h,m*.05); ctx.fill(); ctx.stroke();
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#fff';
+  ctx.font='700 '+m*.055+'px system-ui'; ctx.fillText(activeMenu==='games'?'MENU DE JOGOS':'CONFIGURAÇÕES',menu.cx,menu.cy-h*.25);
+  ctx.font='600 '+m*.034+'px system-ui'; ctx.fillStyle='rgba(255,255,255,.9)';
+  if(activeMenu==='games'){ ctx.fillText('Nenhum jogo encontrado.',menu.cx,menu.cy); ctx.fillText('Instale jogos para tentar jogar.',menu.cx,menu.cy+m*.065); }
+  else { ctx.fillText('Configurações do VR',menu.cx,menu.cy); ctx.fillText('Use o modo VR Box e ajuste as duas telas.',menu.cx,menu.cy+m*.065); }
+  pageButton={x:menu.cx-m*.19,y:menu.cy+h*.28,w:m*.38,h:m*.12};
+  ctx.fillStyle='#4cc9f0'; ctx.beginPath(); ctx.roundRect(pageButton.x,pageButton.y,pageButton.w,pageButton.h,m*.025); ctx.fill();
+  ctx.fillStyle='#06121f'; ctx.font='700 '+m*.04+'px system-ui'; ctx.fillText('VOLTAR',menu.cx,pageButton.y+pageButton.h/2);
+  ctx.restore();
+}
+
 function drawMenu(dx){
+  if(activeMenu!=='home'){ drawSubPage(dx); return; }
   const m = menu.m;
   ctx.save(); ctx.translate(dx, 0);
   ctx.fillStyle = 'rgba(8,16,36,.78)'; ctx.strokeStyle = '#4cc9f0'; ctx.lineWidth = 2;
@@ -177,14 +198,18 @@ function drawMenu(dx){
 
 function handleMenuGestures(){
   const gun = hands.some(h => h.on && h.gun);
-  if (gun) activeMenu = 'home';
+  if(gun){ if(!gunSince) gunSince=performance.now(); if(!gunActivated && performance.now()-gunSince>=1500){ activeMenu='home'; gunActivated=true; } }
+  else { gunSince=0; gunActivated=false; }
   const pinching = cur.some(c => c.pinch);
-  if (pinching && !lastPinch) {
-    const p = cur.find(c => c.pinch)?.pt;
-    const b = menu.btn.find(x => p && p[0] >= x.x && p[0] <= x.x+x.w && p[1] >= x.y && p[1] <= x.y+x.h);
-    if (b?.n === 'JOGOS') activeMenu = 'games';
-    else if (b?.n === 'CONFIGURAÇÕES') activeMenu = 'settings';
-    else if (b?.n === 'ENTRAR EM VR') activeMenu = 'home';
+  if(pinching && !lastPinch){
+    const p=cur.find(c=>c.pinch)?.pt;
+    if(activeMenu!=='home' && pageButton && p && p[0]>=pageButton.x && p[0]<=pageButton.x+pageButton.w && p[1]>=pageButton.y && p[1]<=pageButton.y+pageButton.h){ activeMenu='home'; }
+    else if(activeMenu==='home'){
+      const b=menu.btn.find(x=>p && p[0]>=x.x && p[0]<=x.x+x.w && p[1]>=x.y && p[1]<=x.y+x.h);
+      if(b?.n==='JOGOS') activeMenu='games';
+      else if(b?.n==='CONFIGURAÇÕES') activeMenu='settings';
+      else if(b?.n==='ENTRAR EM VR') activeMenu='home';
+    }
   }
   lastPinch = pinching;
 }
@@ -221,7 +246,7 @@ function frame(ts){
 
 /* ---------- Início ---------- */
 $('go').onclick = async () => {
-  const btn = $('go'); btn.disabled = true;
+  const btn = $('go'); btn.disabled = true; $('ov').classList.add('loading');
   stereo = $('two').checked;
   let step = 'permissões';
   try{
@@ -256,7 +281,7 @@ $('go').onclick = async () => {
     resize(); running = true; requestAnimationFrame(frame);
   }catch(e){
     st.textContent = 'Deu erro em "' + step + '": ' + (e.message || e) + '. Confira a internet e se você permitiu a câmera e o movimento.';
-    btn.disabled = false; btn.textContent = 'TENTAR DE NOVO';
+    $('ov').classList.remove('loading'); btn.disabled = false; btn.textContent = 'TENTAR DE NOVO';
   }
 };
 </script>
