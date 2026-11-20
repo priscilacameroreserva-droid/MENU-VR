@@ -106,7 +106,7 @@ addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
 /* ---------- Desenho ---------- */
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 const items = ['ENTRAR EM VR', 'JOGOS', 'CONFIGURAÇÕES'];
-let activeMenu = 'home', lastPinch = false, gunSince = 0, gunActivated = false;
+let activeMenu = 'home', lastPinch = false, gunSince = 0, gunActivated = false, returnLoadingUntil = 0;
 let EW, EH, cur = [], lastT = 0, menu = {}, pageButton = null;
 
 const toEye = p => {
@@ -152,7 +152,17 @@ function drawHands(){
 }
 
 function drawSubPage(dx){
-  const m=menu.m, w=m*.72, h=m*.58, x=menu.cx-w/2, y=menu.cy-h/2;
+  const m=menu.m;
+  if(activeMenu==='loading'){
+    ctx.save(); ctx.translate(dx,0); ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='rgba(8,16,36,.94)'; ctx.strokeStyle='#4cc9f0'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.roundRect(menu.cx-m*.30,menu.cy-m*.22,m*.60,m*.44,m*.05); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='600 '+m*.04+'px system-ui'; ctx.fillText('Voltando ao menu...',menu.cx,menu.cy+m*.12);
+    ctx.beginPath(); ctx.arc(menu.cx,menu.cy-m*.06,m*.07,0,Math.PI*2); ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=m*.018; ctx.stroke();
+    ctx.beginPath(); ctx.arc(menu.cx,menu.cy-m*.06,m*.07,-Math.PI/2,-Math.PI/2+Math.PI*1.45); ctx.strokeStyle='#4cc9f0'; ctx.lineWidth=m*.018; ctx.lineCap='round'; ctx.stroke(); ctx.restore();
+    return;
+  }
+  const w=m*.72, h=m*.58, x=menu.cx-w/2, y=menu.cy-h/2;
   ctx.save(); ctx.translate(dx,0);
   ctx.fillStyle='rgba(8,16,36,.94)'; ctx.strokeStyle='#4cc9f0'; ctx.lineWidth=2;
   ctx.beginPath(); ctx.roundRect(x,y,w,h,m*.05); ctx.fill(); ctx.stroke();
@@ -181,7 +191,7 @@ function drawMenu(dx){
   for(const b of menu.btn){
     const hov = cur.some(c => c.pt[0] > b.x && c.pt[0] < b.x + b.w && c.pt[1] > b.y && c.pt[1] < b.y + b.h);
     const press = hov && cur.some(c => c.pinch);
-    ctx.fillStyle = b.n === 'JOGOS' ? '#18C964' : (press ? '#7CFF6B' : hov ? '#4cc9f0' : 'rgba(76,201,240,.22)');
+    ctx.fillStyle = press ? '#18C964' : (hov ? '#4cc9f0' : 'rgba(76,201,240,.22)');
     ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, m * 0.03); ctx.fill();
     ctx.fillStyle = hov ? '#06121f' : '#fff';
     ctx.font = '700 ' + m * (b.n.length > 8 ? 0.05 : 0.065) + 'px system-ui';
@@ -198,9 +208,11 @@ function drawMenu(dx){
 
 function handleMenuGestures(){
   const gun = hands.some(h => h.on && h.gun);
-  if(gun){ if(!gunSince) gunSince=performance.now(); if(!gunActivated && performance.now()-gunSince>=1500){ activeMenu='home'; gunActivated=true; } }
+  if(gun){ if(!gunSince) gunSince=performance.now(); if(!gunActivated && performance.now()-gunSince>=1000 && activeMenu!=='home'){ activeMenu='loading'; returnLoadingUntil=performance.now()+850; gunActivated=true; } }
   else { gunSince=0; gunActivated=false; }
+  if(activeMenu==='loading' && performance.now()>=returnLoadingUntil){ activeMenu='home'; }
   const pinching = cur.some(c => c.pinch);
+  if(activeMenu==='loading'){ lastPinch=pinching; return; }
   if(pinching && !lastPinch){
     const p=cur.find(c=>c.pinch)?.pt;
     if(activeMenu!=='home' && pageButton && p && p[0]>=pageButton.x && p[0]<=pageButton.x+pageButton.w && p[1]>=pageButton.y && p[1]<=pageButton.y+pageButton.h){ activeMenu='home'; }
