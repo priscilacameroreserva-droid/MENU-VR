@@ -92,8 +92,9 @@ function onOri(e){
   const f = fwd(quat(e.alpha, e.beta, e.gamma, o));
   const yaw = Math.atan2(f[0], -f[2]), pitch = Math.asin(Math.max(-1, Math.min(1, f[1])));
   if(!gy.init){ gy.yaw = yaw; gy.pitch = pitch; gy.y0 = yaw; gy.p0 = pitch; gy.init = true; }
-  gy.yaw += wrap(yaw - gy.yaw) * 0.6;
-  gy.pitch += (pitch - gy.pitch) * 0.6;
+  // Sensibilidade máxima: aplicar cada atualização do sensor sem amortecer o movimento.
+  gy.yaw = yaw;
+  gy.pitch = pitch;
   gy.has = true;
 }
 addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
@@ -204,8 +205,11 @@ $('go').onclick = async () => {
     if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
       await DeviceOrientationEvent.requestPermission();
     }
-    addEventListener('deviceorientation', onOri);
-    st.textContent = 'Abrindo a câmera...';
+    // Prioriza orientação absoluta (referenciada ao mundo); usa deviceorientation como fallback.
+    const absoluteSupported = ('ondeviceorientationabsolute' in window);
+    if(absoluteSupported) addEventListener('deviceorientationabsolute', onOri, true);
+    else addEventListener('deviceorientation', onOri, true);
+    st.textContent = 'Giroscópio ativado: sensibilidade máxima. Abrindo a câmera...';
     const stream = await navigator.mediaDevices.getUserMedia({audio: false, video: {facingMode: {ideal: 'environment'}, width: {ideal: 1280}, height: {ideal: 720}, frameRate: {ideal: 60}}});
     vid.srcObject = stream; await vid.play();
     navigator.wakeLock?.request('screen').catch(() => {});
