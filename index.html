@@ -373,7 +373,7 @@ async function startCameraMode(mode){
       closeHands = document.createElement('button');
       closeHands.type = 'button'; closeHands.textContent = '✕';
       closeHands.setAttribute('aria-label','Sair do rastreamento de mãos e voltar ao início');
-      closeHands.style.cssText = 'position:fixed;top:max(18px,env(safe-area-inset-top));right:max(18px,env(safe-area-inset-right));z-index:2147483647;width:54px;height:54px;border:2px solid #fff;border-radius:50%;background:#e53935;color:#fff;font:bold 30px system-ui;box-shadow:0 3px 14px #0009;touch-action:manipulation;pointer-events:auto;';
+      closeHands.style.cssText = 'position:fixed;top:max(18px,env(safe-area-inset-top));right:max(18px,env(safe-area-inset-right));z-index:2147483647;width:54px;height:54px;border:2px solid #fff;border-radius:50%;background:rgba(8,16,36,.82);color:#fff;font:bold 30px system-ui;box-shadow:0 3px 14px #0009;touch-action:manipulation;pointer-events:auto;';
       document.body.appendChild(closeHands);
       closeHands.addEventListener('click', exitCameraMode);
     }
@@ -460,15 +460,27 @@ $('test6').onclick = async () => {
     close6.type = 'button';
     close6.textContent = '✕';
     close6.setAttribute('aria-label','Sair do teste 6DOF e voltar ao início');
-    close6.style.cssText = 'display:none;position:fixed;top: max(18px, env(safe-area-inset-top));right: max(18px, env(safe-area-inset-right));z-index:2147483647;width:54px;height:54px;border:2px solid #fff;border-radius:50%;background:#e53935;color:#fff;font:bold 30px system-ui;box-shadow:0 3px 14px #0009;touch-action: manipulation;pointer-events:auto;';
+    close6.style.cssText = 'display:none;position:fixed;top: max(18px, env(safe-area-inset-top));right: max(18px, env(safe-area-inset-right));z-index:2147483647;width:54px;height:54px;border:2px solid #fff;border-radius:50%;background:rgba(8,16,36,.82);color:#fff;font:bold 30px system-ui;box-shadow:0 3px 14px #0009;touch-action: manipulation;pointer-events:auto;';
     document.body.appendChild(close6);
-    close6.addEventListener('click',()=>{
+    close6.addEventListener('click',async()=>{
       const session = renderer?.xr?.getSession();
-      if(session) session.end();
+      if(session){ try{ await session.end(); }catch(e){} }
+      // Fallback: se o navegador não disparar sessionend, também limpa a tela e volta ao início.
+      if(close6){ close6.remove(); close6=null; }
+      renderer?.setAnimationLoop(null);
+      renderer?.dispose();
+      renderer?.domElement?.remove();
+      if(arButton){ arButton.remove(); arButton=null; }
+      $('ov').style.display='flex';
+      $('ov').classList.remove('loading');
+      btn.disabled=false;
+      st.textContent='Teste 6DOF encerrado. Você voltou à tela inicial.';
     });
 
     renderer.xr.addEventListener('sessionstart',()=>{
       $('ov').style.display='none';
+      // O botão do AR só é necessário para iniciar a sessão; durante o teste fica apenas o X.
+      if(arButton){ arButton.remove(); arButton=null; }
       if(close6) close6.style.display='block';
       baseline=null; panelPlaced=false;
       missionExtremes.forEach(v=>Object.keys(v).forEach(k=>v[k]=false));
@@ -479,10 +491,14 @@ $('test6').onclick = async () => {
       renderer.setAnimationLoop(null);
       renderer.dispose();
       renderer.domElement.remove();
-      if(arButton) arButton.remove();
+      if(arButton){ arButton.remove(); arButton=null; }
+      // Restaura explicitamente a tela inicial ao encerrar o AR, evitando ficar no quadro preto.
+      document.body.style.background='#000';
+      cv.style.display='none';
       $('ov').style.display='flex';
       $('ov').classList.remove('loading');
       btn.disabled=false;
+      st.textContent='Teste 6DOF encerrado. Você voltou à tela inicial.';
     });
 
     renderer.setAnimationLoop((time,frame)=>{
