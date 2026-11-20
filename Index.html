@@ -103,6 +103,8 @@ addEventListener('dblclick', () => { gy.y0 = gy.yaw; gy.p0 = gy.pitch; });
 const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
 const items = ['PLAY', 'JOGOS', 'CONFIGURAÇÕES', 'SAIR'];
 let EW, EH, cur = [], lastT = 0, menu = {};
+let settingsOpen = false, tracking3Dof = true;
+const pinchLatch = [false, false];
 
 const toEye = p => {
   const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720, s = Math.max(EW / vw, EH / vh);
@@ -111,7 +113,7 @@ const toEye = p => {
 
 function layoutMenu(dt){
   const m = Math.min(EW, EH), ppd = EH / 1.0;
-  if(gy.has){
+  if(tracking3Dof && gy.has){
     // menu preso no mundo: ao virar a cabeça ele fica no lugar (escala pelo campo de visão da câmera, ~66°)
     const vw = vid.videoWidth || 1280, vh = vid.videoHeight || 720;
     const fpx = 0.77 * vw * Math.max(EW / vw, EH / vh);
@@ -120,7 +122,8 @@ function layoutMenu(dt){
     menu.cx = EW / 2 - fpx * Math.tan(dy); menu.cy = EH / 2 + fpx * Math.tan(dp);
   } else { menu.cx = EW / 2; menu.cy = EH / 2; }
   menu.m = m; menu.w = m * 0.6; menu.h = m * 0.86;
-  menu.btn = items.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
+  const shownItems = settingsOpen ? ['VOLTAR', tracking3Dof ? 'DESATIVAR 3DOF' : 'ATIVAR 3DOF'] : items;
+  menu.btn = shownItems.map((n, i) => ({n, x: menu.cx - m * 0.26, y: menu.cy - menu.h / 2 + m * 0.17 + i * m * 0.175, w: m * 0.52, h: m * 0.15}));
 }
 
 function drawHands(){
@@ -131,7 +134,7 @@ function drawHands(){
     const size = Math.hypot(h.d[0].x - h.d[9].x, h.d[0].y - h.d[9].y) || 1;
     const pd = Math.hypot(h.d[4].x - h.d[8].x, h.d[4].y - h.d[8].y) / size;
     h.pinch = h.pinch ? pd < 0.45 : pd < 0.3;
-    cur.push({pt: [(P[4][0] + P[8][0]) / 2, (P[4][1] + P[8][1]) / 2], pinch: h.pinch});
+    cur.push({pt: [(P[4][0] + P[8][0]) / 2, (P[4][1] + P[8][1]) / 2], pinch: h.pinch, id: hands.indexOf(h)});
     ctx.lineWidth = 3; ctx.lineCap = 'round';
     ctx.strokeStyle = h.pinch ? '#7CFF6B' : 'rgba(255,255,255,.9)';
     ctx.beginPath();
@@ -144,13 +147,28 @@ function drawHands(){
   }
 }
 
+function handlePinch(){
+  for(let i = 0; i < pinchLatch.length; i++){
+    const c = cur.find(q => q.id === i);
+    if(!c || !c.pinch){ pinchLatch[i] = false; continue; }
+    if(pinchLatch[i]) continue;
+    pinchLatch[i] = true;
+    const b = menu.btn.find(q => c.pt[0] >= q.x && c.pt[0] <= q.x + q.w && c.pt[1] >= q.y && c.pt[1] <= q.y + q.h);
+    if(!b) continue;
+    if(settingsOpen){
+      if(b.n === 'VOLTAR') settingsOpen = false;
+      else if(b.n.includes('3DOF')) { tracking3Dof = !tracking3Dof; settingsOpen = false; }
+    } else if(b.n === 'CONFIGURAÇÕES') settingsOpen = true;
+  }
+}
+
 function drawMenu(dx){
   const m = menu.m;
   ctx.save(); ctx.translate(dx, 0);
   ctx.fillStyle = 'rgba(8,16,36,.78)'; ctx.strokeStyle = '#4cc9f0'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.roundRect(menu.cx - menu.w / 2, menu.cy - menu.h / 2, menu.w, menu.h, m * 0.05); ctx.fill(); ctx.stroke();
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = '700 ' + m * 0.065 + 'px system-ui'; ctx.fillText('MENU', menu.cx, menu.cy - menu.h / 2 + m * 0.09);
+  ctx.font = '700 ' + m * 0.065 + 'px system-ui'; ctx.fillText(settingsOpen ? 'CONFIGURAÇÕES' : 'MENU', menu.cx, menu.cy - menu.h / 2 + m * 0.09);
   for(const b of menu.btn){
     const hov = cur.some(c => c.pt[0] > b.x && c.pt[0] < b.x + b.w && c.pt[1] > b.y && c.pt[1] < b.y + b.h);
     const press = hov && cur.some(c => c.pinch);
@@ -190,6 +208,7 @@ function frame(ts){
     ctx.beginPath(); ctx.rect(0, 0, EW, EH); ctx.clip();
     ctx.drawImage(vid, (EW - vw * s) / 2, (EH - vh * s) / 2, vw * s, vh * s);
     drawHands();
+    if(e === 0) handlePinch();
     drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
     ctx.restore();
   }
