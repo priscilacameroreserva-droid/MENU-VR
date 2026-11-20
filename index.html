@@ -31,6 +31,10 @@ label{font-size:14px}
   <div id="st">Prepare seu VR Box e permita a câmera e o movimento quando solicitado.</div>
   <div id="loader" aria-label="Carregando"></div>
   <button id="go">ENTRAR EM VR</button>
+  <div id="tests" style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;max-width:420px">
+    <button id="test6" style="font-size:15px;padding:12px 16px">FAZER TESTE 6DOF</button>
+    <button id="testHands" style="font-size:15px;padding:12px 16px">TESTE RASTREAMENTO DE MÃOS</button>
+  </div>
   <div id="version">Menu VR versão 0.0001 · @lsevi_12</div>
 </div>
 <canvas id="c"></canvas>
@@ -38,7 +42,7 @@ label{font-size:14px}
 <script type="module">
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d'), vid = $('v'), st = $('st');
-let stereo = true, dpr = 1, lm = null, running = false;
+let stereo = true, dpr = 1, lm = null, running = false, runMode = 'vr';
 
 function resize(){ dpr = Math.min(devicePixelRatio || 1, 2); cv.width = innerWidth * dpr; cv.height = innerHeight * dpr; }
 addEventListener('resize', resize);
@@ -309,15 +313,17 @@ function frame(ts){
     ctx.arc(EW / 2, EH / 2, lensR, 0, Math.PI * 2); ctx.clip();
     ctx.drawImage(vid, (EW - vw * s) / 2, (EH - vh * s) / 2, vw * s, vh * s);
     drawHands();
-    drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
+    if(runMode !== 'hands') drawMenu(stereo ? (e === 0 ? disp : -disp) : 0);
     ctx.restore();
   }
   handleMenuGestures();
 }
 
 /* ---------- Início ---------- */
-$('go').onclick = async () => {
-  const btn = $('go'); btn.disabled = true; $('ov').classList.add('loading');
+async function startCameraMode(mode){
+  runMode = mode;
+  const btn = mode === 'hands' ? $('testHands') : $('go');
+  btn.disabled = true; $('ov').classList.add('loading');
   stereo = true;
   let step = 'permissões';
   try{
@@ -353,6 +359,66 @@ $('go').onclick = async () => {
   }catch(e){
     st.textContent = 'Deu erro em "' + step + '": ' + (e.message || e) + '. Confira a internet e se você permitiu a câmera e o movimento.';
     $('ov').classList.remove('loading'); btn.disabled = false; btn.textContent = 'TENTAR DE NOVO';
+  }
+}
+$('go').onclick = () => startCameraMode('vr');
+$('testHands').onclick = () => startCameraMode('hands');
+
+$('test6').onclick = async () => {
+  const btn = $('test6');
+  btn.disabled = true; $('ov').classList.add('loading');
+  try {
+    if (!navigator.xr) throw new Error('Este navegador não oferece WebXR. Abra no Chrome atualizado e verifique se o ARCore está instalado.');
+    const supported = await navigator.xr.isSessionSupported('immersive-ar');
+    if (!supported) throw new Error('Este aparelho/navegador não liberou o modo AR imersivo. O jogo original continua intacto.');
+    const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js');
+    const { ARButton } = await import('https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/webxr/ARButton.js');
+    const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.setSize(innerWidth,innerHeight);
+    renderer.xr.enabled = true;
+    renderer.setClearColor(0x000000,0);
+    document.body.appendChild(renderer.domElement);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera();
+    const panelCanvas = document.createElement('canvas');
+    panelCanvas.width=900; panelCanvas.height=900;
+    const g=panelCanvas.getContext('2d');
+    g.fillStyle='rgba(8,16,36,.94)'; g.strokeStyle='#4cc9f0'; g.lineWidth=12;
+    g.beginPath(); g.roundRect(45,45,810,810,55); g.fill(); g.stroke();
+    g.fillStyle='#fff'; g.textAlign='center'; g.font='bold 76px system-ui'; g.fillText('TESTE 6DOF',450,180);
+    ['MOVER A CABEÇA','APROXIMAR','AFASTAR','MOVER PARA OS LADOS'].forEach((v,i)=>{
+      g.fillStyle='rgba(76,201,240,.25)'; g.beginPath(); g.roundRect(110,250+i*135,680,100,25); g.fill();
+      g.fillStyle='#fff'; g.font='bold 38px system-ui'; g.fillText(v,450,315+i*135);
+    });
+    const texture=new THREE.CanvasTexture(panelCanvas);
+    const panel=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.9),new THREE.MeshBasicMaterial({map:texture,transparent:true,side:THREE.DoubleSide}));
+    let placed=false;
+    renderer.xr.addEventListener('sessionstart',()=>{
+      $('ov').style.display='none';
+      const session=renderer.xr.getSession();
+      const placePanel=(time,frame)=>{
+        if(placed || !frame) return;
+        const ref=renderer.xr.getReferenceSpace();
+        const pose=frame.getViewerPose(ref);
+        if(!pose) return;
+        const view=pose.views[0];
+        const p=view.transform.position, q=view.transform.orientation;
+        const forward=new THREE.Vector3(0,0,-1).applyQuaternion(new THREE.Quaternion(q.x,q.y,q.z,q.w));
+        panel.position.set(p.x+forward.x*1.5,p.y+forward.y*1.5,p.z+forward.z*1.5);
+        panel.quaternion.set(q.x,q.y,q.z,q.w);
+        scene.add(panel); placed=true;
+      };
+      session.requestAnimationFrame(function loop(t,frame){placePanel(t,frame); if(session) session.requestAnimationFrame(loop);});
+    });
+    renderer.xr.addEventListener('sessionend',()=>{renderer.dispose();renderer.domElement.remove();$('ov').style.display='flex';$('ov').classList.remove('loading');btn.disabled=false;placed=false;});
+    const arButton=ARButton.createButton(renderer,{requiredFeatures:['local']});
+    arButton.style.position='fixed'; arButton.style.bottom='22px'; arButton.style.left='50%'; arButton.style.transform='translateX(-50%)';
+    document.body.appendChild(arButton);
+    arButton.click();
+  } catch(e) {
+    st.textContent = 'Não foi possível iniciar o teste 6DOF: ' + (e.message || e);
+    $('ov').classList.remove('loading'); btn.disabled=false;
   }
 };
 </script>
