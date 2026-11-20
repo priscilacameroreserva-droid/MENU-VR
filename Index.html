@@ -132,14 +132,23 @@ function detectThumbsUp(){
     const h = hands[i];
     if(!h.on || !h.d) { thumbsUpLatch[i] = false; continue; }
     const p = h.d;
-    // Polegar estendido para cima e os outros quatro dedos recolhidos.
+    // Polegar para cima = tela única; polegar para baixo = tela dividida.
     const thumbUp = p[4].y < p[3].y && p[3].y < p[2].y;
+    const thumbDown = p[4].y > p[3].y && p[3].y > p[2].y;
     const fingersCurled = [[8,6],[12,10],[16,14],[20,18]].every(([tip,pip]) => p[tip].y > p[pip].y + 0.015);
-    const gesture = thumbUp && fingersCurled;
-    if(gesture && !thumbsUpLatch[i] && stereo){
-      stereo = false;
-      $('two').checked = false;
-      st.textContent = 'Modo de tela única ativado pelo gesto de joinha.';
+    const gestureUp = thumbUp && fingersCurled;
+    const gestureDown = thumbDown && fingersCurled;
+    const gesture = gestureUp || gestureDown;
+    if(gesture && !thumbsUpLatch[i]){
+      if(gestureUp){
+        stereo = false;
+        $('two').checked = false;
+        st.textContent = 'Joinha para cima: modo de tela única ativado.';
+      } else if(gestureDown){
+        stereo = true;
+        $('two').checked = true;
+        st.textContent = 'Joinha para baixo: modo de tela dividida ativado.';
+      }
     }
     thumbsUpLatch[i] = gesture;
   }
